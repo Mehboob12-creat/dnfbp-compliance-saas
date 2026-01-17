@@ -8,8 +8,9 @@ export default function CustomerView() {
   useEffect(() => {
     async function load() {
       const id = window.location.pathname.split("/").pop();
+
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
+      if (!userData?.user) {
         window.location.href = "/login";
         return;
       }
@@ -25,16 +26,22 @@ export default function CustomerView() {
         return;
       }
 
-      const { data: txns } = await supabase
+      const { data: txns, error: txnErr } = await supabase
         .from("transactions")
         .select("*")
         .eq("customer_id", id)
         .order("created_at", { ascending: false })
         .limit(1);
 
+      if (txnErr) {
+        setMsg(txnErr.message);
+        return;
+      }
+
       setData({ customer, latestTransaction: txns?.[0] || null });
       setMsg("");
     }
+
     load();
   }, []);
 
@@ -42,7 +49,7 @@ export default function CustomerView() {
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
         <a href="/dashboard" style={{ textDecoration: "none" }}>← Back</a>
 
         <h1 style={{ fontSize: 26, fontWeight: 900, marginTop: 12 }}>
@@ -67,7 +74,7 @@ export default function CustomerView() {
           </Card>
 
           <Card title="Next Step">
-            <div>✅ Next we will add Risk Score + Red Flags + STR/CTR recommendation here.</div>
+            ✅ Next we add Risk Score + Red Flags + STR/CTR recommendation here.
           </Card>
         </div>
       </div>

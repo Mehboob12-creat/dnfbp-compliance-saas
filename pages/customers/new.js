@@ -7,18 +7,20 @@ export default function NewCustomer() {
   const [client, setClient] = useState(null);
   const [msg, setMsg] = useState("");
 
-  // 15-question fields (natural person)
+  // Identity
   const [fullName, setFullName] = useState("");
   const [cnic, setCnic] = useState("");
   const [fatherName, setFatherName] = useState("");
   const [dob, setDob] = useState("");
   const [cityDistrict, setCityDistrict] = useState("");
 
+  // Financial
   const [profession, setProfession] = useState("business_person");
   const [filerStatus, setFilerStatus] = useState("non_filer");
   const [annualIncome, setAnnualIncome] = useState("");
   const [ntn, setNtn] = useState("");
 
+  // Transaction
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("property_purchase");
   const [paymentMode, setPaymentMode] = useState("cash");
@@ -29,15 +31,16 @@ export default function NewCustomer() {
   useEffect(() => {
     async function init() {
       const { data } = await supabase.auth.getUser();
-      if (!data.user) {
+      if (!data?.user) {
         window.location.href = "/login";
         return;
       }
+
       try {
         const c = await getOrCreateClient();
         setClient(c);
       } catch (e) {
-        setMsg(e.message || "Failed to load client profile.");
+        setMsg(e.message || "Failed to load your business profile (client).");
       } finally {
         setLoading(false);
       }
@@ -45,65 +48,87 @@ export default function NewCustomer() {
     init();
   }, []);
 
+  function validateCNIC(value) {
+    if (!value) return true;
+    // Simple CNIC format: 12345-1234567-1
+    return /^\d{5}-\d{7}-\d{1}$/.test(value.trim());
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
-    setMsg("Saving...");
+    setMsg("");
 
-    if (!client) {
+    if (!client?.id) {
       setMsg("Client profile missing. Please refresh.");
       return;
     }
 
+    if (!fullName.trim()) {
+      setMsg("Full Name is required.");
+      return;
+    }
+
+    if (!validateCNIC(cnic)) {
+      setMsg("CNIC format must be like: 35201-1234567-8");
+      return;
+    }
+
+    const amt = Number(amount);
+    if (!amt || amt <= 0) {
+      setMsg("Please enter a valid Transaction Amount.");
+      return;
+    }
+
+    setMsg("Saving...");
+
     try {
-      // 1) Create customer
+      // 1) Insert customer
       const { data: cust, error: custErr } = await supabase
         .from("customers")
         .insert([
           {
             client_id: client.id,
             customer_type: "natural",
-            full_name: fullName,
-            cnic,
-            father_or_spouse_name: fatherName,
+            full_name: fullName.trim(),
+            cnic: cnic.trim() || null,
+            father_or_spouse_name: fatherName.trim() || null,
             date_of_birth: dob || null,
-            city_district: cityDistrict,
+            city_district: cityDistrict.trim() || null,
             profession,
             filer_status: filerStatus,
             annual_income: annualIncome ? Number(annualIncome) : null,
-            ntn
-          }
+            ntn: ntn.trim() || null,
+          },
         ])
         .select()
         .single();
 
       if (custErr) throw custErr;
 
-      // 2) Create transaction
+      // 2) Insert transaction
       const { data: txn, error: txnErr } = await supabase
         .from("transactions")
         .insert([
           {
             client_id: client.id,
             customer_id: cust.id,
-            amount: Number(amount),
+            amount: amt,
             purpose,
             payment_mode: paymentMode,
             source_of_funds: sourceOfFunds,
             pep_status: pepStatus,
-            previous_str_ctr: previousStrCtr
-          }
+            previous_str_ctr: previousStrCtr,
+          },
         ])
         .select()
         .single();
 
       if (txnErr) throw txnErr;
 
-      setMsg("Saved! Now calculating risk...");
-
-      // For now: go to a simple “customer view” page later
+      setMsg("Saved ✅ Opening customer file...");
       window.location.href = `/customers/${cust.id}`;
     } catch (err) {
-      setMsg(err.message || "Error saving. Check your inputs.");
+      setMsg(err.message || "Error saving. Please try again.");
     }
   }
 
@@ -111,30 +136,35 @@ export default function NewCustomer() {
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>Add Customer (Natural Person)</h1>
-            <p style={{ color: "#64748b", marginTop: 6 }}>15-question DNFBP onboarding wizard</p>
-          </div>
-          <a href="/dashboard" style={{ textDecoration: "none" }}>← Back</a>
-        </div>
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <TopBar title="Add Customer (Natural Person)" subtitle="15-question DNFBP onboarding wizard" />
 
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
           <Section title="Basic Identity (5)">
-            <Field label="Full Name (CNIC)">
+            <Field label="Full Name (as per CNIC) *">
               <input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             </Field>
-            <Field label="CNIC Number">
-              <input value={cnic} onChange={(e) => setCnic(e.target.value)} placeholder="35201-1234567-8" />
+
+            <Field label="CNIC Number (optional)">
+              <input
+                value={cnic}
+                onChange={(e) => setCnic(e.target.value)}
+                placeholder="35201-1234567-8"
+              />
+              <Hint ok={validateCNIC(cnic)}>
+                Format: 12345-1234567-1
+              </Hint>
             </Field>
-            <Field label="Father/Husband Name">
+
+            <Field label="Father/Husband Name (optional)">
               <input value={fatherName} onChange={(e) => setFatherName(e.target.value)} />
             </Field>
-            <Field label="Date of Birth">
+
+            <Field label="Date of Birth (optional)">
               <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
             </Field>
-            <Field label="City / District">
+
+            <Field label="Current City/District (optional)">
               <input value={cityDistrict} onChange={(e) => setCityDistrict(e.target.value)} />
             </Field>
           </Section>
@@ -160,18 +190,31 @@ export default function NewCustomer() {
               </select>
             </Field>
 
-            <Field label="Declared Annual Income (PKR)">
-              <input type="number" value={annualIncome} onChange={(e) => setAnnualIncome(e.target.value)} placeholder="500000" />
+            <Field label="Declared Annual Income (PKR) (optional)">
+              <input
+                type="number"
+                value={annualIncome}
+                onChange={(e) => setAnnualIncome(e.target.value)}
+                placeholder="500000"
+                min="0"
+              />
             </Field>
 
-            <Field label="NTN (if available)">
+            <Field label="NTN (optional)">
               <input value={ntn} onChange={(e) => setNtn(e.target.value)} />
             </Field>
           </Section>
 
           <Section title="Transaction Details (6)">
-            <Field label="Transaction Amount (PKR)">
-              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="1500000" />
+            <Field label="Transaction Amount (PKR) *">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                placeholder="1500000"
+                min="1"
+              />
             </Field>
 
             <Field label="Purpose of Transaction">
@@ -233,7 +276,7 @@ export default function NewCustomer() {
                 background: "#0A1F44",
                 color: "white",
                 fontWeight: 800,
-                cursor: "pointer"
+                cursor: "pointer",
               }}
             >
               Save Customer
@@ -260,6 +303,18 @@ export default function NewCustomer() {
   );
 }
 
+function TopBar({ title, subtitle }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div>
+        <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>{title}</h1>
+        <p style={{ color: "#64748b", marginTop: 6 }}>{subtitle}</p>
+      </div>
+      <a href="/dashboard" style={{ textDecoration: "none" }}>← Back</a>
+    </div>
+  );
+}
+
 function Section({ title, children }) {
   return (
     <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
@@ -277,5 +332,13 @@ function Field({ label, children }) {
       <span style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>{label}</span>
       {children}
     </label>
+  );
+}
+
+function Hint({ ok, children }) {
+  return (
+    <span style={{ fontSize: 12, color: ok ? "#64748b" : "#ef4444" }}>
+      {children}
+    </span>
   );
 }

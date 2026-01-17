@@ -1,3 +1,4 @@
+import jsPDF from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../utils/supabase";
 
@@ -75,6 +76,73 @@ export default function CustomerView() {
       ],
       { onConflict: "customer_id,transaction_id" }
     );
+<button onClick={downloadRiskPDF} style={{ ...primaryBtn, background: "#ffffff", color: "#0f172a", border: "1px solid #e2e8f0" }}>
+  Download Risk PDF
+</button>
+function downloadRiskPDF() {
+  if (!data?.customer || !data?.latestTransaction || !risk) {
+    alert("Risk data not ready yet.");
+    return;
+  }
+
+  const doc = new jsPDF();
+
+  const c = data.customer;
+  const t = data.latestTransaction;
+
+  const lines = [];
+  lines.push("DNFBP COMPLIANCE — RISK ASSESSMENT REPORT");
+  lines.push(" ");
+  lines.push(`Customer Name: ${c.full_name || ""}`);
+  lines.push(`CNIC: ${c.cnic || ""}`);
+  lines.push(`City/District: ${c.city_district || ""}`);
+  lines.push(`Profession: ${c.profession || ""}`);
+  lines.push(`Filer Status: ${c.filer_status || ""}`);
+  lines.push(`Annual Income (PKR): ${c.annual_income || ""}`);
+  lines.push(`NTN: ${c.ntn || ""}`);
+  lines.push(" ");
+  lines.push("LATEST TRANSACTION");
+  lines.push(`Amount (PKR): ${t.amount || ""}`);
+  lines.push(`Purpose: ${(t.purpose || "").toString().toUpperCase()}`);
+  lines.push(`Payment Mode: ${(t.payment_mode || "").toString().toUpperCase()}`);
+  lines.push(`Source of Funds: ${(t.source_of_funds || "").toString().toUpperCase()}`);
+  lines.push(`PEP: ${(t.pep_status || "").toString().toUpperCase()}`);
+  lines.push(`Previous STR/CTR: ${(t.previous_str_ctr || "").toString().toUpperCase()}`);
+  lines.push(" ");
+  lines.push("RISK SUMMARY");
+  lines.push(`Risk Category: ${risk.category}`);
+  lines.push(`Score: ${risk.overallScore}/100`);
+  lines.push(`EDD Required: ${risk.recommendations?.edd ? "YES" : "NO"}`);
+  lines.push(`STR Suggested: ${risk.recommendations?.str ? "YES" : "NO"}`);
+  lines.push(`CTR Suggested: ${risk.recommendations?.ctr ? "YES" : "NO"}`);
+  lines.push(" ");
+  lines.push("SCORE BREAKDOWN");
+  (risk.breakdown || []).forEach((b) => {
+    lines.push(`${b.label}: ${b.score}/${b.max} — ${b.note}`);
+  });
+  lines.push(" ");
+  lines.push("RED FLAGS");
+  (risk.redFlags || []).forEach((rf) => {
+    lines.push(`${rf.code}: ${rf.note}`);
+  });
+  lines.push(" ");
+  lines.push("RECOMMENDATION (REGULATOR-SAFE)");
+  (risk.recommendations?.reasons || []).forEach((r) => lines.push(`- ${r}`));
+
+  // Write text to PDF
+  let y = 14;
+  doc.setFont("helvetica", "bold");
+  doc.text(lines[0], 10, y);
+  y += 8;
+
+  doc.setFont("helvetica", "normal");
+  const body = lines.slice(1).join("\n");
+  const wrapped = doc.splitTextToSize(body, 190);
+  doc.text(wrapped, 10, y);
+
+  const safeName = (c.full_name || "customer").replace(/[^a-z0-9]+/gi, "_");
+  doc.save(`Risk_Report_${safeName}.pdf`);
+}
 
   if (error) throw error;
 

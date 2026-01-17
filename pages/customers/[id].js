@@ -1,4 +1,4 @@
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../utils/supabase";
 

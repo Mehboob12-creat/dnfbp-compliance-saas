@@ -55,7 +55,10 @@ export default function CustomerView() {
     setMsg("Saving risk assessment...");
 
     try {
-      const { error } = await supabase.from("risk_assessments").insert([
+  const { error } = await supabase
+    .from("risk_assessments")
+    .upsert(
+      [
         {
           client_id: data.customer.client_id,
           customer_id: data.customer.id,
@@ -69,9 +72,11 @@ export default function CustomerView() {
           edd_required: risk.recommendations.edd,
           reasons: risk.recommendations.reasons,
         },
-      ]);
+      ],
+      { onConflict: "customer_id,transaction_id" }
+    );
 
-      if (error) throw error;
+  if (error) throw error;
 
       setMsg("Saved ✅");
       setTimeout(() => setMsg(""), 1200);

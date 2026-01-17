@@ -1,480 +1,308 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../utils/supabase";
 
-export default function CustomerView() {
-  const [data, setData] = useState(null);
+export default function CustomerFile() {
+  const [user, setUser] = useState(null);
+  const [customer, setCustomer] = useState(null);
+  const [txs, setTxs] = useState([]);
   const [msg, setMsg] = useState("Loading...");
+  const [saving, setSaving] = useState(false);
+
+  // Transaction form
+  const [amount, setAmount] = useState("");
+  const [purpose, setPurpose] = useState("property");
+  const [paymentMode, setPaymentMode] = useState("bank_transfer");
+  const [sourceOfFunds, setSourceOfFunds] = useState("salary");
+  const [pepStatus, setPepStatus] = useState("no");
 
   useEffect(() => {
-    async function load() {
-      const id = window.location.pathname.split("/").pop();
-
+    async function boot() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) {
         window.location.href = "/login";
         return;
       }
+      setUser(userData.user);
 
-      const { data: customer, error: custErr } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (custErr) {
-        setMsg(custErr.message);
+      const id = getCustomerIdFromPath();
+      if (!id) {
+        setMsg("Missing customer id.");
         return;
       }
 
-      const { data: txns, error: txnErr } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("customer_id", id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (txnErr) {
-        setMsg(txnErr.message);
-        return;
-      }
-
-      setData({ customer, latestTransaction: txns?.[0] || null });
+      await loadCustomer(id);
+      await loadTxs(id);
       setMsg("");
     }
 
-    load();
+    boot();
   }, []);
 
-  const risk = useMemo(() => {
-    if (!data?.customer || !data?.latestTransaction) return null;
-    return calculateRisk(data.customer, data.latestTransaction);
-  }, [data]);
+  function getCustomerIdFromPath() {
+    // Works without router import
+    const parts = window.location.pathname.split("/");
+    return parts[2] || null; // /customers/<id>
+  }
 
-  async function saveRisk() {
-    if (!data?.customer || !data?.latestTransaction || !risk) return;
-    setMsg("Saving risk assessment...");
+  async function loadCustomer(id) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, client_id, full_name, cnic, father_name, date_of_birth, city_district, profession, filer_status, annual_income, ntn, created_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
+    setCustomer(data);
+  }
+
+  async function loadTxs(id) {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("id, amount, purpose, payment_mode, source_of_funds, pep_status, created_at")
+      .eq("customer_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      // if table missing/rls etc, show error
+      setMsg(error.message);
+      return;
+    }
+    setTxs(data || []);
+  }
+
+  async function addTransaction() {
+    if (!customer) return;
+    if (!amount || Number(amount) <= 0) {
+      alert("Enter a valid transaction amount.");
+      return;
+    }
 
     try {
-      const { error } = await supabase.from("risk_assessments").insert([
-        {
-          client_id: data.customer.client_id,
-          customer_id: data.customer.id,
-          transaction_id: data.latestTransaction.id,
-          overall_score: risk.overallScore,
-          risk_category: risk.category,
-          score_breakdown: risk.breakdown,
-          red_flags: risk.redFlags,
-          str_recommended: risk.recommendations.str,
-          ctr_recommended: risk.recommendations.ctr,
-          edd_required: risk.recommendations.edd,
-          reasons: risk.recommendations.reasons,
-        },
-      ]);
+      setSaving(true);
 
+      const payload = {
+        client_id: customer.client_id,
+        customer_id: customer.id,
+        amount: Number(amount),
+        purpose,
+        payment_mode: paymentMode,
+        source_of_funds: sourceOfFunds,
+        pep_status: pepStatus,
+      };
+
+      const { error } = await supabase.from("transactions").insert([payload]);
       if (error) throw error;
 
-      setMsg("Saved ✅");
-      setTimeout(() => setMsg(""), 1200);
+      setAmount("");
+      await loadTxs(customer.id);
+      alert("Transaction saved ✅");
     } catch (e) {
-      setMsg(e.message || "Failed to save risk assessment");
+      alert(e?.message || "Failed to save transaction");
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (!data) return <div style={{ padding: 24 }}>{msg}</div>;
+  if (!user) return <p style={{ padding: 24 }}>Loading...</p>;
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        <a href="/dashboard" style={{ textDecoration: "none" }}>← Back</a>
+      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+        <a href="/customers" style={{ textDecoration: "none" }}>← Customers</a>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginTop: 10 }}>
           <div>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>
-              {data.customer.full_name}
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 950 }}>
+              {customer?.full_name || "Customer File"}
             </h1>
-            <p style={{ color: "#64748b", marginTop: 6 }}>
-              Customer File • {data.customer.customer_type?.toUpperCase() || "NATURAL"}
+            <p style={{ marginTop: 6, color: "#64748b" }}>
+              CNIC: {customer?.cnic || "-"} • City: {customer?.city_district || "-"}
             </p>
           </div>
 
-          {risk ? (
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <Badge label={`${risk.category} (${risk.overallScore}/100)`} tone={risk.tone} />
-              <button
-                onClick={saveRisk}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #e2e8f0",
-                  background: "white",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                }}
-              >
-                Save Risk Assessment
-              </button>
-            </div>
-          ) : null}
+          <a href="/dashboard" style={ghostBtn}>Dashboard</a>
         </div>
 
-        {msg ? (
-          <div style={{ marginTop: 12, color: "#0f172a" }}>{msg}</div>
-        ) : null}
+        {msg ? <div style={{ marginTop: 12 }}>{msg}</div> : null}
 
-        <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-          <Card title="Customer Profile">
-            <Row k="CNIC" v={data.customer.cnic || "-"} />
-            <Row k="City/District" v={data.customer.city_district || "-"} />
-            <Row k="Profession" v={data.customer.profession || "-"} />
-            <Row k="Filer Status" v={formatFiler(data.customer.filer_status)} />
-            <Row k="Annual Income (PKR)" v={fmtMoney(data.customer.annual_income)} />
-            <Row k="NTN" v={data.customer.ntn || "-"} />
-          </Card>
+        {/* Customer details */}
+        {customer && (
+          <div style={card}>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Customer Details</div>
+            <div style={grid2}>
+              <Info label="Father/Husband Name" value={customer.father_name} />
+              <Info label="DOB" value={customer.date_of_birth} />
+              <Info label="Profession" value={customer.profession} />
+              <Info label="Filer Status" value={customer.filer_status} />
+              <Info label="Annual Income" value={customer.annual_income} />
+              <Info label="NTN" value={customer.ntn} />
+            </div>
+          </div>
+        )}
 
-          <Card title="Latest Transaction">
-            <Row k="Amount (PKR)" v={fmtMoney(data.latestTransaction?.amount)} />
-            <Row k="Purpose" v={pretty(data.latestTransaction?.purpose)} />
-            <Row k="Payment Mode" v={pretty(data.latestTransaction?.payment_mode)} />
-            <Row k="Source of Funds" v={pretty(data.latestTransaction?.source_of_funds)} />
-            <Row k="PEP" v={pretty(data.latestTransaction?.pep_status)} />
-            <Row k="Previous STR/CTR" v={pretty(data.latestTransaction?.previous_str_ctr)} />
-          </Card>
+        {/* Add transaction */}
+        {customer && (
+          <div style={card}>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Add Transaction</div>
 
-          {risk ? (
-            <Card title="Risk Assessment (Explainable)">
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-                <Badge label={`Risk: ${risk.category}`} tone={risk.tone} />
-                <Badge label={`Score: ${risk.overallScore}/100`} tone={risk.tone} />
-                {risk.recommendations.edd ? <Badge label="EDD Required" tone="warn" /> : <Badge label="EDD Not Required" tone="ok" />}
-                {risk.recommendations.str ? <Badge label="STR Suggested" tone="danger" /> : <Badge label="STR Not Suggested" tone="ok" />}
-                {risk.recommendations.ctr ? <Badge label="CTR Suggested" tone="danger" /> : <Badge label="CTR Not Suggested" tone="ok" />}
-              </div>
+            <div style={grid2}>
+              <Field label="Amount (PKR)">
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="e.g. 1500000"
+                  style={input}
+                />
+              </Field>
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <SubTitle>Score breakdown</SubTitle>
-                {risk.breakdownRows.map((r) => (
-                  <Row key={r.k} k={r.k} v={`${r.score}/${r.max} • ${r.note}`} />
-                ))}
+              <Field label="Purpose">
+                <select value={purpose} onChange={(e) => setPurpose(e.target.value)} style={input}>
+                  <option value="property">Property</option>
+                  <option value="jewelry">Jewelry</option>
+                  <option value="legal">Legal Services</option>
+                  <option value="investment">Investment</option>
+                  <option value="other">Other</option>
+                </select>
+              </Field>
 
-                <SubTitle>Red flags</SubTitle>
-                {risk.redFlags.length === 0 ? (
-                  <div style={{ color: "#64748b" }}>No red flags detected.</div>
-                ) : (
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {risk.redFlags.map((rf) => (
-                      <div key={rf.flag} style={{ padding: 10, borderRadius: 12, border: "1px solid #fee2e2", background: "#fff1f2" }}>
-                        <div style={{ fontWeight: 900 }}>{rf.flag}</div>
-                        <div style={{ color: "#991b1b", marginTop: 4 }}>{rf.description}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <Field label="Mode of Payment">
+                <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} style={input}>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="digital_wallet">Digital Wallet</option>
+                  <option value="foreign_remittance">Foreign Remittance</option>
+                  <option value="cash">Cash</option>
+                </select>
+              </Field>
 
-                <SubTitle>Recommendation reasons (regulator-safe)</SubTitle>
-                <ul style={{ margin: 0, paddingLeft: 18, color: "#0f172a" }}>
-                  {risk.recommendations.reasons.map((x, i) => <li key={i}>{x}</li>)}
-                </ul>
+              <Field label="Source of Funds">
+                <select value={sourceOfFunds} onChange={(e) => setSourceOfFunds(e.target.value)} style={input}>
+                  <option value="salary">Salary</option>
+                  <option value="business_income">Business Income</option>
+                  <option value="sale_of_asset">Sale of Asset</option>
+                  <option value="foreign_remittance">Foreign Remittance</option>
+                  <option value="inheritance_gift">Inheritance/Gift</option>
+                  <option value="other">Other</option>
+                </select>
+              </Field>
 
-                <div style={{ marginTop: 8, padding: 12, borderRadius: 12, border: "1px solid #e2e8f0", background: "#f8fafc" }}>
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>Neutral wording (inspection-safe)</div>
-                  <div style={{ color: "#334155" }}>{risk.narrative}</div>
-                </div>
-              </div>
-            </Card>
+              <Field label="PEP Status">
+                <select value={pepStatus} onChange={(e) => setPepStatus(e.target.value)} style={input}>
+                  <option value="no">Not a PEP</option>
+                  <option value="family">Family Member of PEP</option>
+                  <option value="yes">Politically Exposed Person</option>
+                </select>
+              </Field>
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={addTransaction} disabled={saving} style={primaryBtn}>
+                {saving ? "Saving..." : "Save Transaction"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Transactions list */}
+        <div style={card}>
+          <div style={{ fontWeight: 950, marginBottom: 10 }}>Transactions</div>
+
+          {txs.length === 0 ? (
+            <div style={{ color: "#64748b" }}>No transactions yet.</div>
           ) : (
-            <Card title="Risk Assessment">
-              Add a transaction first to calculate risk.
-            </Card>
+            <div style={{ display: "grid", gap: 10 }}>
+              {txs.map((t) => (
+                <div key={t.id} style={txRow}>
+                  <div style={{ fontWeight: 900 }}>PKR {Number(t.amount).toLocaleString()}</div>
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+                    {t.purpose} • {t.payment_mode} • {t.source_of_funds} • PEP: {t.pep_status}
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 6 }}>
+                    {new Date(t.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
+        </div>
+
+        <div style={{ marginTop: 16, color: "#64748b", fontSize: 12 }}>
+          Logged in as: {user.email}
         </div>
       </div>
     </div>
   );
 }
 
-/** -----------------------------
- *  Risk Engine (v1 - explainable)
- *  ----------------------------- */
-function calculateRisk(customer, txn) {
-  // Weights / Max scores (admin panel later; hardcoded for now)
-  const MAX = {
-    filer: 20,
-    incomeRatio: 25,
-    source: 20,
-    payment: 15,
-    geo: 10,
-    pep: 10,
-  };
-
-  // 1) Filer score
-  const filerScore =
-    customer.filer_status === "non_filer" ? 20 :
-    customer.filer_status === "unknown" ? 10 :
-    0;
-
-  // 2) Income ratio score (txn.amount vs annual_income)
-  const income = Number(customer.annual_income || 0);
-  const amount = Number(txn.amount || 0);
-  const ratio = income > 0 ? (amount / income) * 100 : null;
-
-  let incomeRatioScore = 0;
-  let ratioNote = "Income not provided";
-  if (ratio !== null) {
-    ratioNote = `Transaction is ${Math.round(ratio)}% of declared income`;
-    if (ratio < 50) incomeRatioScore = 0;
-    else if (ratio < 100) incomeRatioScore = 5;
-    else if (ratio < 150) incomeRatioScore = 10;
-    else if (ratio < 200) incomeRatioScore = 15;
-    else incomeRatioScore = 25;
-  } else {
-    incomeRatioScore = 15; // conservative when missing income
-  }
-
-  // 3) Source of funds score
-  const src = txn.source_of_funds;
-  const sourceScore =
-    src === "salary" ? 0 :
-    src === "business_income" ? 5 :
-    src === "sale_of_asset" ? 10 :
-    src === "foreign_remittance" ? 15 :
-    src === "inheritance_gift" ? 12 :
-    src === "unknown" ? 20 :
-    15; // other
-
-  // 4) Payment mode score
-  const pm = txn.payment_mode;
-  const paymentScore =
-    pm === "bank_transfer" ? 0 :
-    pm === "cheque" ? 5 :
-    pm === "digital_wallet" ? 3 :
-    pm === "foreign_remittance" ? 8 :
-    15; // cash
-
-  // 5) Geographic risk score (simple tier; admin editable later)
-  const geoTier = geoTierOf(customer.city_district || "");
-  const geoScore = geoTier === "high" ? 10 : geoTier === "medium" ? 5 : 0;
-
-  // 6) PEP score
-  const pep = txn.pep_status;
-  const pepScore = pep === "yes" ? 10 : pep === "family" ? 5 : 0;
-
-  // Base score (cap at 100)
-  const baseScore =
-    filerScore + incomeRatioScore + sourceScore + paymentScore + geoScore + pepScore;
-
-  // Red flags (extra boosters)
-  const redFlags = [];
-
-  if (pm === "cash" && amount > 500000) {
-    redFlags.push({
-      flag: "CASH_LARGE",
-      description: "Large cash transaction (higher vulnerability due to limited traceability).",
-      weight: 15,
-    });
-  }
-
-  if (customer.filer_status === "non_filer" && amount > 1000000) {
-    redFlags.push({
-      flag: "NON_FILER_LARGE",
-      description: "Non-filer with high-value transaction (documentation gap risk).",
-      weight: 20,
-    });
-  }
-
-  if (income > 0 && amount > income * 2) {
-    redFlags.push({
-      flag: "INCOME_MISMATCH",
-      description: "Transaction significantly exceeds declared income (inconsistency indicator).",
-      weight: 25,
-    });
-  }
-
-  if (src === "unknown" || src === "other") {
-    redFlags.push({
-      flag: "VAGUE_SOURCE",
-      description: "Source of funds not clearly identified or documented.",
-      weight: 15,
-    });
-  }
-
-  if (geoTier === "high" && amount > 500000) {
-    redFlags.push({
-      flag: "HIGH_RISK_AREA",
-      description: "Higher geographic vulnerability combined with a high-value transaction.",
-      weight: 20,
-    });
-  }
-
-  if (pep === "yes" && pm === "cash") {
-    redFlags.push({
-      flag: "PEP_CASH",
-      description: "PEP exposure with cash payment (requires enhanced review).",
-      weight: 25,
-    });
-  }
-
-  const redBoost = redFlags.reduce((s, x) => s + x.weight, 0);
-  const overallScore = Math.min(100, baseScore + redBoost);
-
-  const category =
-    overallScore <= 30 ? "LOW" :
-    overallScore <= 60 ? "MEDIUM" :
-    overallScore <= 80 ? "HIGH" :
-    "VERY_HIGH";
-
-  const tone =
-    category === "LOW" ? "ok" :
-    category === "MEDIUM" ? "warn" :
-    "danger";
-
-  // STR/CTR/EDD recommendations (v1)
-  const recommendations = recommendFiling({ customer, txn, overallScore, redFlags, geoTier });
-
-  const breakdown = {
-    filerScore,
-    incomeRatioScore,
-    sourceScore,
-    paymentScore,
-    geoScore,
-    pepScore,
-    ratio,
-  };
-
-  const breakdownRows = [
-    { k: "Filer status", score: filerScore, max: MAX.filer, note: formatFiler(customer.filer_status) },
-    { k: "Income vs transaction", score: incomeRatioScore, max: MAX.incomeRatio, note: ratioNote },
-    { k: "Source of funds", score: sourceScore, max: MAX.source, note: pretty(src) },
-    { k: "Payment mode", score: paymentScore, max: MAX.payment, note: pretty(pm) },
-    { k: "Geographic risk", score: geoScore, max: MAX.geo, note: `Tier: ${geoTier.toUpperCase()}` },
-    { k: "PEP exposure", score: pepScore, max: MAX.pep, note: pretty(pep) },
-  ];
-
-  const narrative = makeNarrative({ category, overallScore, redFlags, recommendations });
-
-  return { overallScore, category, tone, breakdown, breakdownRows, redFlags, recommendations, narrative };
-}
-
-function recommendFiling({ txn, overallScore, redFlags, geoTier }) {
-  const amount = Number(txn.amount || 0);
-  const pm = txn.payment_mode;
-
-  const str =
-    overallScore >= 81 ||
-    redFlags.length >= 3 ||
-    redFlags.some((x) => ["INCOME_MISMATCH", "PEP_CASH"].includes(x.flag));
-
-  const ctr =
-    pm === "cash" && amount >= 2000000;
-
-  const edd =
-    overallScore > 60 ||
-    txn.pep_status === "yes" ||
-    geoTier === "high" ||
-    redFlags.length >= 2;
-
-  const reasons = [];
-  reasons.push(`Risk score computed using weighted factors + red flags (explainable scoring).`);
-  reasons.push(`Human review is required before any regulatory filing decision.`);
-  if (edd) reasons.push(`Enhanced Due Diligence is recommended due to elevated risk indicators.`);
-  if (str) reasons.push(`An internal STR review is suggested because multiple risk indicators are present.`);
-  if (ctr) reasons.push(`CTR review is suggested because cash threshold appears met/exceeded.`);
-
-  return { str, ctr, edd, reasons };
-}
-
-function makeNarrative({ category, overallScore, redFlags, recommendations }) {
-  const parts = [];
-  parts.push(`Overall risk is categorized as ${category} with a score of ${overallScore}/100.`);
-  if (redFlags.length > 0) {
-    parts.push(`Key indicators observed: ${redFlags.map((x) => x.flag).join(", ")}.`);
-  } else {
-    parts.push(`No major red flags were detected based on the provided information.`);
-  }
-  if (recommendations.edd) parts.push(`Enhanced Due Diligence is recommended as a precautionary control.`);
-  parts.push(`This output is a system recommendation for compliance support; final decisions remain with the compliance officer.`);
-  return parts.join(" ");
-}
-
-/** -----------------------------
- *  Helpers
- *  ----------------------------- */
-function geoTierOf(city) {
-  const c = (city || "").toLowerCase();
-
-  // high (illustrative defaults; later editable in admin panel)
-  const high = ["mohmand", "bajaur", "khyber", "north waziristan", "south waziristan", "chaman", "turbat", "gwadar"];
-  if (high.some((x) => c.includes(x))) return "high";
-
-  // medium (illustrative)
-  const medium = ["mardan", "swabi", "sialkot", "gujranwala", "sukkur", "larkana", "rahim yar khan", "sahiwal"];
-  if (medium.some((x) => c.includes(x))) return "medium";
-
-  return "low";
-}
-
-function fmtMoney(v) {
-  if (v === null || v === undefined || v === "") return "-";
-  const n = Number(v);
-  if (Number.isNaN(n)) return String(v);
-  return n.toLocaleString("en-PK");
-}
-
-function pretty(v) {
-  if (!v) return "-";
-  return String(v).replaceAll("_", " ").replaceAll("-", " ").toUpperCase();
-}
-
-function formatFiler(v) {
-  if (!v) return "-";
-  if (v === "non_filer") return "NON-FILER";
-  if (v === "filer") return "FILER";
-  return "UNKNOWN";
-}
-
-function Card({ title, children }) {
+function Info({ label, value }) {
   return (
-    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
-      <div style={{ display: "grid", gap: 8 }}>{children}</div>
+    <div>
+      <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 800 }}>{label}</div>
+      <div style={{ fontWeight: 900, color: "#0f172a" }}>{value || "-"}</div>
     </div>
   );
 }
 
-function SubTitle({ children }) {
-  return <div style={{ fontSize: 13, fontWeight: 900, color: "#334155", marginTop: 8 }}>{children}</div>;
-}
-
-function Row({ k, v }) {
+function Field({ label, children }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <div style={{ color: "#64748b" }}>{k}</div>
-      <div style={{ fontWeight: 700, textAlign: "right" }}>{String(v)}</div>
+    <div>
+      <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 800, marginBottom: 6 }}>{label}</div>
+      {children}
     </div>
   );
 }
 
-function Badge({ label, tone }) {
-  const styles =
-    tone === "danger"
-      ? { bg: "#fff1f2", bd: "#fecdd3", tx: "#9f1239" }
-      : tone === "warn"
-      ? { bg: "#fffbeb", bd: "#fde68a", tx: "#92400e" }
-      : { bg: "#ecfeff", bd: "#a5f3fc", tx: "#155e75" };
+const card = {
+  marginTop: 14,
+  padding: 16,
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+};
 
-  return (
-    <span
-      style={{
-        padding: "6px 10px",
-        borderRadius: 999,
-        border: `1px solid ${styles.bd}`,
-        background: styles.bg,
-        color: styles.tx,
-        fontWeight: 900,
-        fontSize: 12,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
+const grid2 = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 12,
+};
+
+const input = {
+  width: "100%",
+  padding: "12px 12px",
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  outline: "none",
+  background: "white",
+};
+
+const primaryBtn = {
+  padding: "10px 14px",
+  borderRadius: 14,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "white",
+  fontWeight: 950,
+  cursor: "pointer",
+};
+
+const ghostBtn = {
+  padding: "10px 12px",
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  background: "white",
+  cursor: "pointer",
+  fontWeight: 900,
+  textDecoration: "none",
+  color: "#0f172a",
+};
+
+const txRow = {
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+};

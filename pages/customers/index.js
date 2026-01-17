@@ -5,6 +5,7 @@ export default function CustomersList() {
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("Loading...");
+  const [highOnly, setHighOnly] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -14,18 +15,43 @@ export default function CustomersList() {
         return;
       }
 
+      // Load customers
       const { data: customers, error } = await supabase
         .from("customers")
         .select("id, full_name, cnic, city_district, created_at")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (error) {
         setMsg(error.message);
         return;
       }
 
-      setRows(customers || []);
+      // Load latest risks (then map latest risk per customer)
+      const { data: risks, error: rErr } = await supabase
+        .from("risk_assessments")
+        .select("customer_id, overall_score, risk_category, created_at")
+        .order("created_at", { ascending: false })
+        .limit(800);
+
+      // If risk table not accessible yet, still show list
+      if (rErr) {
+        setRows(customers || []);
+        setMsg("");
+        return;
+      }
+
+      const riskMap = new Map();
+      for (const r of risks || []) {
+        if (!riskMap.has(r.customer_id)) riskMap.set(r.customer_id, r); // keep latest only
+      }
+
+      const enriched = (customers || []).map((c) => ({
+        ...c,
+        risk: riskMap.get(c.id) || null,
+      }));
+
+      setRows(enriched);
       setMsg("");
     }
 
@@ -34,38 +60,106 @@ export default function CustomersList() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) =>
-      [r.full_name, r.cnic, r.city_district]
-        .filter(Boolean)
-        .some((v) => v.toLowerCase().includes(needle))
-    );
-  }, [rows, q]);
+
+    let out = rows;
+
+    // Search filter
+    if (needle) {
+      out = out.filter((r) =>
+        [r.full_name, r.cnic, r.city_district]
+          .filter(Boolean)
+          .some((v) => v.toLowerCase().includes(needle))
+      );
+    }
+
+    // High risk only filter
+    if (highOnly) {
+      out = out.filter(
+        (r) => r?.risk?.risk_category === "HIGH" || r?.risk?.risk_category === "VERY_HIGH"
+      );
+    }
+
+    return out;
+  }, [rows, q, highOnly]);
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1050, margin: "0 auto" }}>
         <Header />
 
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, CNIC, or city…"
-          style={searchStyle}
-        />
+        <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name, CNIC, or city…"
+            style={searchStyle}
+          />
 
-        {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "white",
+              border: "1px solid #e2e8f0",
+              borderRadius: 14,
+              padding: "10px 12px",
+              userSelect: "none",
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={highOnly}
+              onChange={(e) => setHighOnly(e.target.checked)}
+            />
+            High risk only
+          </label>
+        </div>
+
+        {msg && (
+          <div style={{ marginTop: 12, color: "#0f172a" }}>
+            {msg}
+          </div>
+        )}
 
         <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-          {filtered.length === 0 && !msg && (
+          {!msg && filtered.length === 0 ? (
             <Empty />
-          )}
+          ) : null}
 
           {filtered.map((c) => (
             <a key={c.id} href={`/customers/${c.id}`} style={cardStyle}>
-              <div style={{ fontWeight: 900 }}>{c.full_name || "Unnamed Customer"}</div>
-              <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                CNIC: {c.cnic || "-"} • City: {c.city_district || "-"}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontWeight: 950,
+                      fontSize: 16,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {c.full_name || "Unnamed Customer"}
+                  </div>
+
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+                    CNIC: {c.cnic || "-"} • City: {c.city_district || "-"}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  {c.risk ? (
+                    <Badge
+                      label={`${c.risk.risk_category} (${c.risk.overall_score}/100)`}
+                      tone={toneOf(c.risk.risk_category)}
+                    />
+                  ) : (
+                    <Badge label="NO RISK YET" tone="neutral" />
+                  )}
+                </div>
               </div>
             </a>
           ))}
@@ -80,9 +174,9 @@ function Header() {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
       <div>
         <a href="/dashboard" style={{ textDecoration: "none" }}>← Dashboard</a>
-        <h1 style={{ fontSize: 26, fontWeight: 900, margin: "8px 0 0" }}>Customers</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 950, margin: "8px 0 0" }}>Customers</h1>
         <p style={{ color: "#64748b", marginTop: 6 }}>
-          Search and open customer files.
+          Review customers and their latest risk status.
         </p>
       </div>
 
@@ -96,18 +190,58 @@ function Header() {
 function Empty() {
   return (
     <div style={emptyStyle}>
-      No customers yet. Click <b>“Add Customer”</b> to start.
+      <div style={{ fontWeight: 900, color: "#0f172a" }}>No customers found</div>
+      <div style={{ marginTop: 6 }}>
+        Try a different search, or click <b>“Add Customer”</b>.
+      </div>
     </div>
   );
 }
 
+function toneOf(cat) {
+  if (cat === "LOW") return "ok";
+  if (cat === "MEDIUM") return "warn";
+  if (cat === "HIGH") return "danger";
+  if (cat === "VERY_HIGH") return "danger";
+  return "neutral";
+}
+
+function Badge({ label, tone }) {
+  const styles =
+    tone === "danger"
+      ? { bg: "#fff1f2", bd: "#fecdd3", tx: "#9f1239" }
+      : tone === "warn"
+      ? { bg: "#fffbeb", bd: "#fde68a", tx: "#92400e" }
+      : tone === "ok"
+      ? { bg: "#ecfeff", bd: "#a5f3fc", tx: "#155e75" }
+      : { bg: "#f1f5f9", bd: "#e2e8f0", tx: "#334155" };
+
+  return (
+    <span
+      style={{
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${styles.bd}`,
+        background: styles.bg,
+        color: styles.tx,
+        fontWeight: 950,
+        fontSize: 12,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 const searchStyle = {
-  width: "100%",
-  marginTop: 16,
+  flex: 1,
+  minWidth: 260,
   padding: "12px 14px",
   borderRadius: 14,
   border: "1px solid #e2e8f0",
   outline: "none",
+  background: "white",
 };
 
 const cardStyle = {
@@ -115,7 +249,7 @@ const cardStyle = {
   color: "inherit",
   background: "white",
   border: "1px solid #e2e8f0",
-  borderRadius: 16,
+  borderRadius: 18,
   padding: 16,
 };
 
@@ -124,15 +258,15 @@ const addBtn = {
   borderRadius: 12,
   border: "1px solid #e2e8f0",
   background: "white",
-  fontWeight: 900,
+  fontWeight: 950,
   textDecoration: "none",
   color: "#0f172a",
 };
 
 const emptyStyle = {
-  padding: 20,
-  borderRadius: 16,
-  border: "1px dashed #cbd5f5",
-  background: "#f8fafc",
+  padding: 18,
+  borderRadius: 18,
+  border: "1px dashed #cbd5e1",
+  background: "white",
   color: "#64748b",
 };

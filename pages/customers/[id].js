@@ -185,7 +185,24 @@ function downloadRiskPDF() {
                 }}
               >
                 Save Risk Assessment
-              </button>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+  <button onClick={saveRiskAssessment} style={primaryBtn}>
+    Save Risk Assessment
+  </button>
+
+  <button
+    onClick={downloadRiskPDF}
+    style={{
+      ...primaryBtn,
+      background: "white",
+      color: "#0f172a",
+      border: "1px solid #e2e8f0",
+    }}
+  >
+    Download Risk PDF
+  </button>
+</div>
+
             </div>
           ) : null}
         </div>

@@ -35,89 +35,104 @@ export default function CustomersList() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return rows;
-    return rows.filter((r) => {
-      return (
-        (r.full_name || "").toLowerCase().includes(needle) ||
-        (r.cnic || "").toLowerCase().includes(needle) ||
-        (r.city_district || "").toLowerCase().includes(needle)
-      );
-    });
+    return rows.filter((r) =>
+      [r.full_name, r.cnic, r.city_district]
+        .filter(Boolean)
+        .some((v) => v.toLowerCase().includes(needle))
+    );
   }, [rows, q]);
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
       <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
-          <div>
-            <a href="/dashboard" style={{ textDecoration: "none" }}>← Dashboard</a>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: "8px 0 0" }}>Customers</h1>
-            <p style={{ color: "#64748b", marginTop: 6 }}>Search by name, CNIC, or city.</p>
-          </div>
+        <Header />
 
-          <a
-            href="/customers/new"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #e2e8f0",
-              background: "white",
-              cursor: "pointer",
-              fontWeight: 900,
-              textDecoration: "none",
-              color: "#0f172a",
-              height: "fit-content",
-            }}
-          >
-            + Add Customer
-          </a>
-        </div>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by name, CNIC, or city…"
+          style={searchStyle}
+        />
 
-        <div style={{ marginTop: 12 }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search..."
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #e2e8f0",
-              outline: "none",
-              background: "white",
-            }}
-          />
-        </div>
+        {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
 
-        {msg ? <div style={{ marginTop: 12 }}>{msg}</div> : null}
+        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+          {filtered.length === 0 && !msg && (
+            <Empty />
+          )}
 
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           {filtered.map((c) => (
-            <a
-              key={c.id}
-              href={`/customers/${c.id}`}
-              style={{
-                textDecoration: "none",
-                color: "inherit",
-                background: "white",
-                border: "1px solid #e2e8f0",
-                borderRadius: 16,
-                padding: 14,
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 16 }}>{c.full_name || "Unnamed Customer"}</div>
+            <a key={c.id} href={`/customers/${c.id}`} style={cardStyle}>
+              <div style={{ fontWeight: 900 }}>{c.full_name || "Unnamed Customer"}</div>
               <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
                 CNIC: {c.cnic || "-"} • City: {c.city_district || "-"}
               </div>
             </a>
           ))}
-
-          {filtered.length === 0 && !msg ? (
-            <div style={{ color: "#64748b", padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "white" }}>
-              No customers found.
-            </div>
-          ) : null}
         </div>
       </div>
     </div>
   );
 }
+
+function Header() {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12 }}>
+      <div>
+        <a href="/dashboard" style={{ textDecoration: "none" }}>← Dashboard</a>
+        <h1 style={{ fontSize: 26, fontWeight: 900, margin: "8px 0 0" }}>Customers</h1>
+        <p style={{ color: "#64748b", marginTop: 6 }}>
+          Search and open customer files.
+        </p>
+      </div>
+
+      <a href="/customers/new" style={addBtn}>
+        + Add Customer
+      </a>
+    </div>
+  );
+}
+
+function Empty() {
+  return (
+    <div style={emptyStyle}>
+      No customers yet. Click <b>“Add Customer”</b> to start.
+    </div>
+  );
+}
+
+const searchStyle = {
+  width: "100%",
+  marginTop: 16,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  outline: "none",
+};
+
+const cardStyle = {
+  textDecoration: "none",
+  color: "inherit",
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: 16,
+  padding: 16,
+};
+
+const addBtn = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid #e2e8f0",
+  background: "white",
+  fontWeight: 900,
+  textDecoration: "none",
+  color: "#0f172a",
+};
+
+const emptyStyle = {
+  padding: 20,
+  borderRadius: 16,
+  border: "1px dashed #cbd5f5",
+  background: "#f8fafc",
+  color: "#64748b",
+};

@@ -57,7 +57,7 @@ export default function Dashboard() {
           <CardLink
             title="Add Customer (Natural Person)"
             desc="15-question wizard (start here)."
-            href="/customers/new"
+            href="/customers"
           />
           <Card title="Training Modules" desc="Videos + quizzes (next step)." />
           <Card title="Important Links" desc="FMU, FATF, UN, NACTA (next step)." />
@@ -87,3 +87,4 @@ function CardLink({ title, desc, href }) {
     </a>
   );
 }
+

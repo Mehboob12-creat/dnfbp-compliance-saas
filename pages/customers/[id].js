@@ -551,3 +551,21 @@ function Badge({ label, tone }) {
     </span>
   );
 }
+const primaryBtn = {
+  padding: "10px 14px",
+  borderRadius: 14,
+  border: "1px solid #0f172a",
+  background: "#0f172a",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+const ghostBtn = {
+  padding: "10px 14px",
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  background: "white",
+  color: "#0f172a",
+  fontWeight: 900,
+  cursor: "pointer",
+};

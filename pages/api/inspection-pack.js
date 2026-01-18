@@ -1,6 +1,7 @@
 import archiver from "archiver";
 import { computeInspectionReadiness } from "../../utils/inspection/readiness";
 import { createClient } from "@supabase/supabase-js";
+import { generateRiskAssessmentPdf } from "../../utils/pdf/riskAssessmentPdf";
 
 function safeText(x) {
   return typeof x === "string" ? x.trim() : "";
@@ -263,6 +264,46 @@ export default async function handler(req, res) {
     archive.append(JSON.stringify(risk || { note: "No saved risk record found for this customer." }, null, 2), {
       name: `${baseFolder}/04_Risk_Record.json`,
     });
+// ---- Risk Assessment PDF (inspection-safe, explainable) ----
+const riskForPdf = risk
+  ? {
+      ...risk,
+      // normalize common fields used by the shared generator
+      score: risk.score ?? risk.overall_score ?? "",
+      risk_band: risk.risk_band || risk.risk_category || risk.risk_category || "UNKNOWN",
+      // If your DB stores breakdown rows differently, this still produces a valid PDF.
+      factors: Array.isArray(risk.score_breakdown)
+        ? risk.score_breakdown
+        : Array.isArray(risk.breakdownRows)
+        ? risk.breakdownRows.map((b) => ({
+            label: b.k,
+            value: `${b.score}/${b.max} — ${b.note}`,
+          }))
+        : undefined,
+    }
+  : { score: "", risk_band: "UNKNOWN" };
+
+const redFlagsForPdf = Array.isArray(risk?.red_flags)
+  ? risk.red_flags.map((rf) => (typeof rf === "string" ? rf : `${rf.flag}: ${rf.description}`))
+  : [];
+
+const pdfDoc = generateRiskAssessmentPdf({
+  customer: {
+    ...customer,
+    full_name: customer.full_name || customer.name || "-",
+    city: customer.city || customer.city_district || customer.district || "-",
+  },
+  risk: riskForPdf,
+  redFlags: redFlagsForPdf,
+  generatedBy: "Compliance Officer",
+});
+
+// jsPDF -> Buffer (Node)
+const pdfBuffer = Buffer.from(pdfDoc.output("arraybuffer"));
+
+archive.append(pdfBuffer, {
+  name: `${baseFolder}/04_Risk_Assessment.pdf`,
+});
 
     // Placeholders (v1)
     archive.append(

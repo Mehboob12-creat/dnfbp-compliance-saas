@@ -1,14 +1,11 @@
 export const runtime = "edge";
 
 export async function POST() {
-  // IMPORTANT:
-  // Cloudflare Pages Edge runtime does NOT support Node.js APIs like Buffer/streams,
-  // and packages like "archiver". So the ZIP export must be moved to a Node backend later.
   return new Response(
     JSON.stringify({
-      error: "Inspection pack export is not available on this hosting (Edge runtime).",
+      error: "Inspection pack export is temporarily disabled on Cloudflare Pages.",
       detail:
-        "This endpoint uses Node-only ZIP streaming (archiver/Buffer). Deploy it on a Node backend later.",
+        "This endpoint uses Node-only ZIP streaming (archiver/Buffer). You can enable it later on a Node hosting.",
     }),
     {
       status: 501,

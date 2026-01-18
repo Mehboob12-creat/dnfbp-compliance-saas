@@ -183,7 +183,7 @@ export function InspectionReadinessWidget() {
         // 1) Load customers (lightweight fields)
         const { data: customers, error: custErr } = await supabase
           .from("customers")
-          .select("id, full_name, name, cnic, city_district, city, district, screening_status, screening_done, screening_result")
+          .select("id, full_name, cnic, city_district, city, district, screening_status, screening_done, screening_result")
           .order("created_at", { ascending: false })
           .limit(100);
 
@@ -249,7 +249,7 @@ export function InspectionReadinessWidget() {
 
           return {
             id: c.id,
-            name: (c.full_name || c.name || "Customer").trim(),
+            name: (c.full_name || "Customer").trim(),
             score: readiness.score || 0,
           };
         });

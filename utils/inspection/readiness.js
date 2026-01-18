@@ -57,106 +57,104 @@ function normalizeRiskBand(riskBand) {
   return riskBand;
 }
 
-export function computeInspectionReadiness(input) {
-  const weights = DEFAULT_WEIGHTS;
+/**
+ * Inspection-safe readiness computation.
+ * This function never infers evidence; it only reflects persisted records.
+ */
+export function computeInspectionReadiness(input = {}) {
+  const {
+    kycComplete = false,
+    transactionRecorded = false,
+    screeningDone = false,
+    riskSaved = false,
+    eddDocsUploaded = false,
+    trainingCompleted = false,
+    policyExists = false,
+  } = input;
 
-  const totalWeights =
-    weights.kycComplete +
-    weights.transactionRecorded +
-    weights.screeningDone +
-    weights.riskSaved +
-    weights.eddEvidence +
-    weights.trainingEvidence +
-    weights.policyDocument;
+  // Weights match the product bible intent (total 100)
+  const weights = {
+    kycComplete: 20,
+    transactionRecorded: 10,
+    screeningDone: 15,
+    riskSaved: 15,
+    eddDocsUploaded: 15,
+    trainingCompleted: 15,
+    policyExists: 10,
+  };
 
-  const riskBand = normalizeRiskBand(input.riskBand);
-  const eddRequired = isEddRequired(riskBand);
+  const checklist = [
+    {
+      key: "kycComplete",
+      label: "Customer due diligence recorded",
+      status: !!kycComplete,
+      note: kycComplete ? "Available in records." : "Pending completion in records.",
+    },
+    {
+      key: "transactionRecorded",
+      label: "Transaction recorded",
+      status: !!transactionRecorded,
+      note: transactionRecorded ? "Available in records." : "Pending recording in records.",
+    },
+    {
+      key: "screeningDone",
+      label: "Screening completed",
+      status: !!screeningDone,
+      note: screeningDone ? "Available in records." : "Pending screening record.",
+    },
+    {
+      key: "riskSaved",
+      label: "Risk assessment saved",
+      status: !!riskSaved,
+      note: riskSaved ? "Available in records." : "Pending saved risk assessment.",
+    },
+    {
+      key: "eddDocsUploaded",
+      label: "EDD evidence (if applicable) uploaded",
+      status: !!eddDocsUploaded,
+      note: eddDocsUploaded ? "Available in records." : "Upload evidence if applicable.",
+    },
+    {
+      key: "trainingCompleted",
+      label: "Staff training evidence available",
+      status: !!trainingCompleted,
+      note: trainingCompleted
+        ? "Training completion evidence is available."
+        : "Training completion evidence is not yet available for the current user.",
+    },
+    {
+      key: "policyExists",
+      label: "AML/CFT policy available",
+      status: !!policyExists,
+      note: policyExists ? "Available in records." : "Policy document not yet available.",
+    },
+  ];
 
-  const items = [];
+  // Score calculation
+  let score = 0;
+  if (kycComplete) score += weights.kycComplete;
+  if (transactionRecorded) score += weights.transactionRecorded;
+  if (screeningDone) score += weights.screeningDone;
+  if (riskSaved) score += weights.riskSaved;
+  if (eddDocsUploaded) score += weights.eddDocsUploaded;
+  if (trainingCompleted) score += weights.trainingCompleted;
+  if (policyExists) score += weights.policyExists;
 
-  function addItem({ key, title, ok, notRequired, weight, noteOk, notePending, noteNotRequired }) {
-    const status = notRequired ? "NOT_REQUIRED" : ok ? "OK" : "PENDING";
-    const pointsAwarded = notRequired ? weight : ok ? weight : 0;
+  // Hard gate: if training evidence is missing, cap readiness at 85
+  if (!trainingCompleted && score > 85) score = 85;
 
-    items.push({
-      key,
-      title,
-      status,
-      weight,
-      pointsAwarded,
-      note: notRequired ? noteNotRequired : ok ? noteOk : notePending,
-    });
-  }
+  const missingKeys = checklist.filter((c) => !c.status).map((c) => c.key);
 
-  addItem({
-    key: "kyc_complete",
-    title: "Customer identification record",
-    ok: !!input.kycComplete,
-    notRequired: false,
-    weight: weights.kycComplete,
-    noteOk: "Core identification fields are present in the customer record.",
-    notePending: "Complete the customer identification fields to strengthen the inspection record.",
-  });
-
-  addItem({
-    key: "transaction_recorded",
-    title: "Transaction record",
-    ok: !!input.transactionRecorded,
-    notRequired: false,
-    weight: weights.transactionRecorded,
-    noteOk: "Transaction details are recorded for evidence continuity.",
-    notePending: "Record transaction activity or explicitly note no activity for the period.",
-  });
-
-  addItem({
-    key: "screening_done",
-    title: "Screening evidence",
-    ok: !!input.screeningDone,
-    notRequired: false,
-    weight: weights.screeningDone,
-    noteOk: "Screening status is available as part of the inspection record.",
-    notePending: "Run screening or upload existing screening evidence.",
-  });
-
-  addItem({
-    key: "risk_saved",
-    title: "Risk assessment saved",
-    ok: !!input.riskSaved,
-    notRequired: false,
-    weight: weights.riskSaved,
-    noteOk: "Risk score and band are saved and available.",
-    notePending: "Run and save the risk assessment.",
-  });
-
-  addItem({
-    key: "edd_evidence",
-    title: "Enhanced Due Diligence evidence",
-    ok: !!input.eddEvidenceUploaded,
-    notRequired: !eddRequired,
-    weight: weights.eddEvidence,
-    noteOk: "EDD supporting evidence is available.",
-    notePending: "EDD evidence required for HIGH/VERY_HIGH risk cases.",
-    noteNotRequired: "EDD not required based on current risk band.",
-  });
-
-  const rawScore = items.reduce((s, i) => s + i.pointsAwarded, 0);
-  const score = round1(clampNumber((rawScore / totalWeights) * 100, 0, 100));
-
-  const missing = items.filter(i => i.status === "PENDING").map(i => i.key);
-
-  let band = "NEEDS_EVIDENCE";
-  if (!input.kycComplete || !input.transactionRecorded || !input.screeningDone || !input.riskSaved) {
-    band = "INCOMPLETE_RECORD";
-  } else if (score >= 85 && missing.length === 0) {
-    band = "READY";
-  }
+  // Calm, inspection-safe summary (no fear language)
+  const summary =
+    missingKeys.length === 0
+      ? "Inspection evidence appears complete based on available records."
+      : "Some inspection evidence items are pending based on available records.";
 
   return {
-    score,
-    band,
-    generatedAtISO: new Date().toISOString(),
-    items,
-    missing,
-    inspectionSafeSummary: inspectionSafeSummaryLines(),
+    score: Math.max(0, Math.min(100, score)),
+    summary,
+    checklist,
+    missingKeys,
   };
 }

@@ -339,6 +339,87 @@ export default async function handler(req, res) {
       name: `${baseFolder}/04_Risk_Assessment.pdf`,
     });
 
+    // ---- Inspection Register (CSV) ----
+    // Inspection-safe export record for audits/inspections.
+    // This is a snapshot generated at export time.
+
+    const csvEscape = (v) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      // Quote if contains comma, quote, or newline
+      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const readinessItemStatus = (key) =>
+      readiness?.items?.find((x) => x.key === key)?.status || "PENDING";
+
+    const kycStatus = readinessItemStatus("kyc_complete");
+    const txnStatus = readinessItemStatus("transaction_recorded");
+    const screeningStatus = readinessItemStatus("screening_done");
+    const riskStatus = readinessItemStatus("risk_saved");
+    const eddStatus = readinessItemStatus("edd_evidence");
+    const trainingStatus = readinessItemStatus("training_completed");
+    const policyStatus = readinessItemStatus("policy_exists");
+
+    const eddRequired =
+      normalizeRiskBandFromRiskRow(risk) === "HIGH" ||
+      normalizeRiskBandFromRiskRow(risk) === "VERY_HIGH";
+
+    const docsAvailable = [
+      "Readiness Summary",
+      "Customer Snapshot",
+      "Transactions Summary",
+      "Risk Snapshot",
+      "Risk Assessment PDF",
+    ].join("; ");
+
+    const notes = [
+      "Prepared for inspection export; internal recordkeeping.",
+      "Human review required for regulatory decisions.",
+    ].join(" ");
+
+    const csvHeader = [
+      "Customer ID",
+      "Customer Name",
+      "Export Date (UTC)",
+      "Risk Band",
+      "Risk Score",
+      "Readiness Score",
+      "KYC Record",
+      "Transaction Record",
+      "Screening Evidence",
+      "Risk Saved",
+      "EDD Required",
+      "EDD Evidence",
+      "Training Evidence",
+      "Policy Document",
+      "Documents Available",
+      "Notes",
+    ].join(",") + "\n";
+
+    const csvRow = [
+      csvEscape(id),
+      csvEscape(customerName || ""),
+      csvEscape(new Date().toISOString()),
+      csvEscape(riskForPdf?.risk_band || "UNKNOWN"),
+      csvEscape(riskForPdf?.score ?? ""),
+      csvEscape(readiness?.score ?? ""),
+      csvEscape(kycStatus),
+      csvEscape(txnStatus),
+      csvEscape(screeningStatus),
+      csvEscape(riskStatus),
+      csvEscape(eddRequired ? "Yes" : "No"),
+      csvEscape(eddStatus),
+      csvEscape(trainingStatus),
+      csvEscape(policyStatus),
+      csvEscape(docsAvailable),
+      csvEscape(notes),
+    ].join(",") + "\n";
+
+    archive.append(csvHeader + csvRow, {
+      name: `${baseFolder}/05_Inspection_Register.csv`,
+    });
+
     // Placeholders (v1)
     archive.append(
       placeholderText(

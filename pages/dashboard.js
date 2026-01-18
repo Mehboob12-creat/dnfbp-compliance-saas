@@ -68,6 +68,9 @@ export default function Dashboard() {
 
         {/* Add the Inspection Readiness Widget */}
         <InspectionReadinessWidget />
+        
+        {/* Add the Inspection Quick Actions Card */}
+        <InspectionQuickActionsCard />
       </div>
     </div>
   );
@@ -336,5 +339,131 @@ function InspectionReadinessWidget() {
         )}
       </div>
     </CardShell>
+  );
+}
+
+function InspectionQuickActionsCard() {
+  const [lastCustomerId, setLastCustomerId] = useState("");
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("lastCustomerId") || "";
+      setLastCustomerId(v);
+    } catch {}
+  }, []);
+
+  async function downloadPack() {
+    try {
+      if (!lastCustomerId) {
+        alert("Open a customer file first so the dashboard can remember the customer for export.");
+        return;
+      }
+
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
+
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        alert("Your session has expired. Please log in again.");
+        return;
+      }
+
+      const resp = await fetch("/api/inspection-pack", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ customerId: lastCustomerId }),
+      });
+
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => null);
+        const msg = errJson?.detail || errJson?.error || `Failed with status ${resp.status}`;
+        alert(msg);
+        return;
+      }
+
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      const cd = resp.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] || `inspection_pack_${lastCustomerId}.zip`;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e?.message || "Failed to download inspection pack.");
+    }
+  }
+
+  return (
+    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 900 }}>Inspection Quick Actions</div>
+        <span
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid #e2e8f0",
+            background: "#f1f5f9",
+            color: "#0f172a",
+            fontWeight: 900,
+            fontSize: 12,
+          }}
+          title="Uses the last customer you opened in the Customers section."
+        >
+          {lastCustomerId ? "Customer selected" : "No customer selected"}
+        </span>
+      </div>
+
+      <div style={{ marginTop: 10, color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+        Open Inspection Mode or export an inspection pack for the last customer you viewed.
+        This platform does not automatically file reports or communicate with regulators.
+      </div>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <button
+          onClick={() => {
+            if (!lastCustomerId) {
+              alert("Open a customer file first so the dashboard can remember the customer.");
+              return;
+            }
+            window.location.href = `/inspection/${lastCustomerId}`;
+          }}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 14,
+            border: "1px solid #cbd5e1",
+            background: "white",
+            color: "#0f172a",
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          Open Inspection Mode
+        </button>
+
+        <button
+          onClick={downloadPack}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 14,
+            border: "1px solid #0f172a",
+            background: "#0f172a",
+            color: "white",
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          Download Inspection Pack (ZIP)
+        </button>
+      </div>
+    </div>
   );
 }

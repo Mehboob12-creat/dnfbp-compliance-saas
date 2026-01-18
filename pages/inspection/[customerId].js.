@@ -1,0 +1,429 @@
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/router";
+
+// Step 1 readiness engine (already added in utils/inspection/readiness.js)
+import { computeInspectionReadiness } from "../../utils/inspection/readiness";
+
+// ✅ Supabase client (your project’s pattern)
+import { supabase } from "../../utils/supabase";
+
+// ----------------------
+// Premium UI primitives
+// ----------------------
+function Container({ children }) {
+  return (
+    <div style={{ minHeight: "100vh", background: "#0b1220", color: "#e5e7eb" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px 64px" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Card({ children }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 18,
+        padding: 18,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 10px",
+        borderRadius: 999,
+        fontSize: 12,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(255,255,255,0.04)",
+        color: "#e5e7eb",
+        letterSpacing: 0.2,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Button({ children, onClick, disabled, title }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        borderRadius: 14,
+        padding: "12px 14px",
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: disabled ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+        color: "#e5e7eb",
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SoftLink({ href, children }) {
+  return (
+    <Link href={href} style={{ color: "#c7d2fe", textDecoration: "none" }}>
+      {children}
+    </Link>
+  );
+}
+
+function ProgressBar({ value }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <div
+      style={{
+        height: 10,
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.08)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: `${pct}%`,
+          background: "rgba(199,210,254,0.55)",
+        }}
+      />
+    </div>
+  );
+}
+
+// ----------------------
+// Data helpers (v1)
+// ----------------------
+function safeText(x) {
+  return typeof x === "string" ? x.trim() : "";
+}
+
+/**
+ * Minimal KYC completeness check for v1.
+ * Refine later as your CDD wizard becomes stricter.
+ */
+function isKycComplete(customer) {
+  if (!customer) return false;
+
+  // Common fields; adjust if your schema differs
+  const name = safeText(customer.full_name || customer.name);
+  const cnic = safeText(customer.cnic);
+  const city = safeText(customer.city || customer.district);
+
+  return Boolean(name && cnic && city);
+}
+
+function bandLabel(readinessBand) {
+  if (readinessBand === "READY") return "Inspection export ready";
+  if (readinessBand === "INCOMPLETE_RECORD") return "Core record incomplete";
+  return "Evidence pending";
+}
+
+function statusColor(status) {
+  if (status === "OK") return "#86efac"; // soft green
+  if (status === "NOT_REQUIRED") return "#93c5fd"; // soft blue
+  return "#fde68a"; // soft amber
+}
+
+function statusLabel(status) {
+  if (status === "OK") return "Available";
+  if (status === "NOT_REQUIRED") return "Not required for this case";
+  return "Pending";
+}
+
+/**
+ * Attempts to interpret the risk band from whatever your risk table stores.
+ * Supported: LOW, MEDIUM, HIGH, VERY_HIGH. Unknown -> UNKNOWN
+ */
+function normalizeRiskBandFromRiskRow(riskRow) {
+  const raw = safeText(
+    riskRow?.risk_band || riskRow?.band || riskRow?.riskBand || riskRow?.risk_level || "UNKNOWN"
+  ).toUpperCase();
+
+  if (raw === "VERY HIGH") return "VERY_HIGH";
+  if (raw === "VERY-HIGH") return "VERY_HIGH";
+
+  if (["LOW", "MEDIUM", "HIGH", "VERY_HIGH"].includes(raw)) return raw;
+  return "UNKNOWN";
+}
+
+export default function InspectionModePage() {
+  const router = useRouter();
+  const { customerId } = router.query;
+
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [customer, setCustomer] = useState(null);
+  const [risk, setRisk] = useState(null);
+  const [txCount, setTxCount] = useState(0);
+
+  // ----------------------
+  // Fetch inspection data (v1)
+  // ----------------------
+  useEffect(() => {
+    if (!customerId) return;
+
+    let cancelled = false;
+
+    async function run() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        // 1) Customer record
+        // If your table name differs, update "customers"
+        const customerRes = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", customerId)
+          .single();
+
+        if (customerRes.error) throw customerRes.error;
+
+        // 2) Latest risk record
+        // If your risk table name differs, update "risk_assessments"
+        const riskRes = await supabase
+          .from("risk_assessments")
+          .select("*")
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // 3) Transaction count
+        // If your transactions table name differs, update "transactions"
+        const txRes = await supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("customer_id", customerId);
+
+        if (txRes.error) throw txRes.error;
+
+        if (cancelled) return;
+
+        setCustomer(customerRes.data || null);
+        setRisk(riskRes?.data || null);
+        setTxCount(txRes.count || 0);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(e?.message || "Failed to load inspection data.");
+      } finally {
+        if (cancelled) return;
+        setLoading(false);
+      }
+    }
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  // ----------------------
+  // Compute readiness (Step 1 engine)
+  // ----------------------
+  const readiness = useMemo(() => {
+    const riskBand = normalizeRiskBandFromRiskRow(risk);
+
+    // screeningDone:
+    // If you store screening results elsewhere, wire it here later.
+    // For now, it checks common “screening present” fields.
+    const screeningDone = Boolean(
+      customer?.screening_status ||
+        customer?.screening_done ||
+        customer?.screening_result ||
+        customer?.screeningResult
+    );
+
+    return computeInspectionReadiness({
+      kycComplete: isKycComplete(customer),
+      transactionRecorded: (txCount || 0) > 0,
+      screeningDone,
+      riskSaved: Boolean(risk?.id),
+      riskBand,
+
+      // v1 placeholders (we’ll connect properly when Evidence Locker/Training/Policy ship)
+      eddEvidenceUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
+      trainingCompleted: Boolean(customer?.training_completed || customer?.trainingCompleted),
+      policyExists: Boolean(customer?.policy_exists || customer?.policyExists),
+    });
+  }, [customer, risk, txCount]);
+
+  return (
+    <Container>
+      {/* Top bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>
+            <SoftLink href="/dashboard">Dashboard</SoftLink> <span style={{ opacity: 0.5 }}>/</span>{" "}
+            <SoftLink href="/customers">Customers</SoftLink> <span style={{ opacity: 0.5 }}>/</span>{" "}
+            <span>Inspection Mode</span>
+          </div>
+
+          <div style={{ fontSize: 26, fontWeight: 750, letterSpacing: -0.4 }}>Inspection Mode</div>
+
+          <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.45, maxWidth: 820 }}>
+            Prepare an inspection-ready export using evidence coverage and clear, reviewable records. This platform does
+            not automatically file reports or communicate with regulators.
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Button
+            disabled
+            onClick={() => {}}
+            title="ZIP export will be implemented in Step 3."
+          >
+            Download Inspection Pack (ZIP) — coming next
+          </Button>
+        </div>
+      </div>
+
+      {/* Loading / error */}
+      {loading ? (
+        <div style={{ marginTop: 18 }}>
+          <Card>
+            <div style={{ opacity: 0.85 }}>Loading inspection data…</div>
+          </Card>
+        </div>
+      ) : loadError ? (
+        <div style={{ marginTop: 18 }}>
+          <Card>
+            <div style={{ fontWeight: 750, marginBottom: 6 }}>Unable to load Inspection Mode</div>
+            <div style={{ opacity: 0.85, marginBottom: 12 }}>{loadError}</div>
+            <div style={{ opacity: 0.75, lineHeight: 1.5 }}>
+              Most commonly, this means one of the Supabase table names in this page does not match your database.
+              Update these three names in the code if needed:
+              <ul style={{ marginTop: 8, marginBottom: 0 }}>
+                <li><code>customers</code></li>
+                <li><code>transactions</code></li>
+                <li><code>risk_assessments</code></li>
+              </ul>
+            </div>
+          </Card>
+        </div>
+      ) : (
+        <>
+          {/* Customer header */}
+          <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 14 }}>
+            <Card>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Customer</div>
+                  <div style={{ fontSize: 18, fontWeight: 750 }}>
+                    {customer?.full_name || customer?.name || "Unnamed customer"}
+                  </div>
+                  <div style={{ marginTop: 6, opacity: 0.78 }}>
+                    CNIC: {customer?.cnic || "—"} · City/District: {customer?.city || customer?.district || "—"}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Badge>ID: {customerId}</Badge>
+                  <Badge>Risk: {safeText(risk?.risk_band || risk?.band || "UNKNOWN") || "UNKNOWN"}</Badge>
+                  <Badge>Tx: {txCount}</Badge>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Inspection readiness</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <div style={{ fontSize: 34, fontWeight: 800 }}>{readiness.score}</div>
+                <div style={{ opacity: 0.85 }}>
+                  <div style={{ fontWeight: 650 }}>{bandLabel(readiness.band)}</div>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
+                    Evidence coverage score (inspection preparation)
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <ProgressBar value={readiness.score} />
+              </div>
+            </Card>
+          </div>
+
+          {/* Checklist */}
+          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
+            <Card>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 750 }}>Evidence checklist</div>
+                  <div style={{ marginTop: 6, opacity: 0.78, maxWidth: 900, lineHeight: 1.5 }}>
+                    Each item reflects whether key evidence is available for export. Items may be marked “Not required”
+                    based on risk band (for example, EDD for LOW/MEDIUM cases).
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <Badge>Generated: {new Date(readiness.generatedAtISO).toLocaleString()}</Badge>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {readiness.items.map((it) => (
+                  <div
+                    key={it.key}
+                    style={{
+                      borderRadius: 16,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.03)",
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 750 }}>{it.title}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ color: statusColor(it.status) }}>●</span>
+                        <span style={{ fontSize: 12, opacity: 0.85 }}>{statusLabel(it.status)}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 8, opacity: 0.8, lineHeight: 1.45 }}>{it.note}</div>
+
+                    <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", opacity: 0.75 }}>
+                      <span>Points</span>
+                      <span style={{ fontWeight: 650 }}>
+                        {it.pointsAwarded} / {it.weight}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Inspection-safe notes */}
+            <Card>
+              <div style={{ fontSize: 16, fontWeight: 750 }}>Inspection-safe notes</div>
+              <ul style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.6 }}>
+                {readiness.inspectionSafeSummary.map((line, idx) => (
+                  <li key={idx}>{line}</li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        </>
+      )}
+    </Container>
+  );
+}

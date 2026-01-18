@@ -1,6 +1,6 @@
-import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../utils/supabase";
+import { generateRiskAssessmentPdf } from "../../utils/pdf/riskAssessmentPdf";
 
 export default function CustomerView() {
   const [data, setData] = useState(null);
@@ -93,73 +93,35 @@ export default function CustomerView() {
         return;
       }
 
-      const doc = new jsPDF();
       const c = data.customer;
-      const t = data.latestTransaction;
 
-      // Title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text("DNFBP COMPLIANCE — RISK ASSESSMENT REPORT", 10, 14);
+      // Map your in-page risk object into a format the shared PDF generator understands.
+      // This keeps everything inspection-safe and avoids duplication.
+      const riskForPdf = {
+        ...risk,
+        score: risk.overallScore,
+        risk_band: risk.category,
+        factors: (risk.breakdownRows || []).map((b) => ({
+          label: b.k,
+          value: `${b.score}/${b.max} — ${b.note}`,
+        })),
+      };
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-
-      const lines = [];
-      lines.push("");
-      lines.push("CUSTOMER PROFILE");
-      lines.push(`Name: ${c.full_name || "-"}`);
-      lines.push(`CNIC: ${c.cnic || "-"}`);
-      lines.push(`City/District: ${c.city_district || "-"}`);
-      lines.push(`Profession: ${c.profession || "-"}`);
-      lines.push(`Filer Status: ${formatFiler(c.filer_status)}`);
-      lines.push(`Annual Income (PKR): ${fmtMoney(c.annual_income)}`);
-      lines.push(`NTN: ${c.ntn || "-"}`);
-
-      lines.push("");
-      lines.push("LATEST TRANSACTION");
-      lines.push(`Amount (PKR): ${fmtMoney(t.amount)}`);
-      lines.push(`Purpose: ${pretty(t.purpose)}`);
-      lines.push(`Payment Mode: ${pretty(t.payment_mode)}`);
-      lines.push(`Source of Funds: ${pretty(t.source_of_funds)}`);
-      lines.push(`PEP: ${pretty(t.pep_status)}`);
-      lines.push(`Previous STR/CTR: ${pretty(t.previous_str_ctr)}`);
-
-      lines.push("");
-      lines.push("RISK SUMMARY");
-      lines.push(`Risk Category: ${risk.category}`);
-      lines.push(`Score: ${risk.overallScore}/100`);
-      lines.push(`EDD Required: ${risk.recommendations?.edd ? "YES" : "NO"}`);
-      lines.push(`STR Suggested: ${risk.recommendations?.str ? "YES" : "NO"}`);
-      lines.push(`CTR Suggested: ${risk.recommendations?.ctr ? "YES" : "NO"}`);
-
-      lines.push("");
-      lines.push("SCORE BREAKDOWN");
-      (risk.breakdownRows || []).forEach((b) => {
-        lines.push(`${b.k}: ${b.score}/${b.max} — ${b.note}`);
+      const doc = generateRiskAssessmentPdf({
+        customer: {
+          ...c,
+          // normalize field names for the shared generator
+          full_name: c.full_name || c.name || "-",
+          city: c.city || c.city_district || c.district || "-",
+        },
+        risk: riskForPdf,
+        redFlags: (risk.redFlags || []).map((rf) => {
+          // keep it readable and inspection-safe
+          if (typeof rf === "string") return rf;
+          return `${rf.flag}: ${rf.description}`;
+        }),
+        generatedBy: "Compliance Officer",
       });
-
-      lines.push("");
-      lines.push("RED FLAGS");
-      if ((risk.redFlags || []).length === 0) {
-        lines.push("None detected.");
-      } else {
-        (risk.redFlags || []).forEach((rf) => {
-          lines.push(`${rf.flag}: ${rf.description}`);
-        });
-      }
-
-      lines.push("");
-      lines.push("RECOMMENDATION (REGULATOR-SAFE)");
-      (risk.recommendations?.reasons || []).forEach((r) => lines.push(`- ${r}`));
-
-      lines.push("");
-      lines.push("NEUTRAL WORDING (INSPECTION-SAFE)");
-      lines.push(risk.narrative);
-
-      const body = lines.join("\n");
-      const wrapped = doc.splitTextToSize(body, 190);
-      doc.text(wrapped, 10, 22);
 
       const safeName = (c.full_name || "customer").replace(/[^a-z0-9]+/gi, "_");
       doc.save(`Risk_Report_${safeName}.pdf`);
@@ -375,7 +337,15 @@ function calculateRisk(customer, txn) {
 
   const pm = txn.payment_mode;
   const paymentScore =
-    pm === "bank_transfer" ? 0 : pm === "cheque" ? 5 : pm === "digital_wallet" ? 3 : pm === "foreign_remittance" ? 8 : 15;
+    pm === "bank_transfer"
+      ? 0
+      : pm === "cheque"
+      ? 5
+      : pm === "digital_wallet"
+      ? 3
+      : pm === "foreign_remittance"
+      ? 8
+      : 15;
 
   const geoTier = geoTierOf(customer.city_district || "");
   const geoScore = geoTier === "high" ? 10 : geoTier === "medium" ? 5 : 0;
@@ -502,9 +472,7 @@ function makeNarrative({ category, overallScore, redFlags, recommendations }) {
     parts.push(`No major red flags were detected based on the provided information.`);
   }
   if (recommendations.edd) parts.push(`Enhanced Due Diligence is recommended as a precautionary control.`);
-  parts.push(
-    `This output is a system recommendation for compliance support; final decisions remain with the compliance officer.`
-  );
+  parts.push(`This output is a system recommendation for compliance support; final decisions remain with the compliance officer.`);
   return parts.join(" ");
 }
 

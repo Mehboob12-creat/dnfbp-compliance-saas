@@ -95,14 +95,38 @@ export default async function handler(req, res) {
     }
 
     // 1) Load customer
-    const customerRes = await supabase
-      .from("customers")
-      .select("*")
-      .eq("id", customerId)
-      .single();
+    // Validate UUID early (prevents "<CUSTOMER_ID>" mistakes)
+const uuidRegex =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    if (customerRes.error) throw customerRes.error;
-    const customer = customerRes.data;
+if (!uuidRegex.test(customerId)) {
+  res.status(400).json({
+    error: "Invalid customerId",
+    detail: "The customerId must be a UUID. Open Inspection Mode from a real customer record.",
+  });
+  return;
+}
+
+// 1) Load customer (robust: do not use .single())
+const customerRes = await supabase
+  .from("customers")
+  .select("*")
+  .eq("id", customerId)
+  .limit(1);
+
+if (customerRes.error) throw customerRes.error;
+
+const customer = Array.isArray(customerRes.data)
+  ? customerRes.data[0]
+  : null;
+
+if (!customer) {
+  res.status(404).json({
+    error: "Customer not found",
+    detail: "No customer record exists for the provided customerId.",
+  });
+  return;
+}
 
     // 2) Load latest risk (adjust table name here if needed)
     const riskRes = await supabase

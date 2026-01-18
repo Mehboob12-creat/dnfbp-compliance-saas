@@ -1,4 +1,6 @@
 export const runtime = 'edge';
+export const config = { runtime: "experimental-edge" };
+
 import archiver from "archiver";
 import { computeInspectionReadiness } from "../../utils/inspection/readiness";
 import { createClient } from "@supabase/supabase-js";

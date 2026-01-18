@@ -62,7 +62,11 @@ export default function Dashboard() {
             href="/customers"
           />
           <Card title="Training Modules" desc="Videos + quizzes (next step)." />
-          <Card title="Important Links" desc="FMU, FATF, UN, NACTA (next step)." />
+          <CardLink
+            title="Important Links"
+            desc="FMU, FATF, UN, NACTA (next step)."
+            href="/links"
+          />
           <Card title="Inspection Mode" desc="Readiness score + pack export (next step)." />
         </div>
 

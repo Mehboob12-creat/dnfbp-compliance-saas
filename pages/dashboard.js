@@ -1,170 +1,3 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../utils/supabase";
-import { computeInspectionReadiness } from "../utils/inspection/readiness";
-
-export default function Dashboard() {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) window.location.href = "/login";
-      setUser(data.user);
-    });
-  }, []);
-
-  async function logout() {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  }
-
-  if (!user) return <p style={{ padding: 24 }}>Loading...</p>;
-
-  return (
-    <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>Dashboard</h1>
-            <p style={{ color: "#64748b", marginTop: 6 }}>Logged in as: {user.email}</p>
-          </div>
-          <button
-            onClick={logout}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #e2e8f0",
-              background: "white",
-              cursor: "pointer",
-            }}
-          >
-            Logout
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 12,
-            marginBottom: 24,
-          }}
-        >
-          <CardLink
-            title="Add Customer (Natural Person)"
-            desc="15-question wizard (start here)."
-            href="/customers"
-          />
-          <Card title="Training Modules" desc="Videos + quizzes (next step)." />
-          <Card title="Important Links" desc="FMU, FATF, UN, NACTA (next step)." />
-          <Card title="Inspection Mode" desc="Readiness score + pack export (next step)." />
-        </div>
-
-        {/* Add the Inspection Readiness Widget */}
-        <InspectionReadinessWidget />
-      </div>
-    </div>
-  );
-}
-
-function Card({ title, desc }) {
-  return (
-    <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-      <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-      <div style={{ color: "#64748b", fontSize: 14 }}>{desc}</div>
-    </div>
-  );
-}
-
-function CardLink({ title, desc, href }) {
-  return (
-    <a href={href} style={{ textDecoration: "none", color: "inherit" }}>
-      <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-        <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-        <div style={{ color: "#64748b", fontSize: 14 }}>{desc}</div>
-      </div>
-    </a>
-  );
-}
-
-function isKycComplete(c) {
-  const name = String(c?.full_name || "").trim();
-  const cnic = String(c?.cnic || "").trim();
-  const cityDistrict = String(c?.city_district || "").trim();
-  return Boolean(name && cnic && cityDistrict);
-}
-
-function normalizeRiskBand(r) {
-  const raw = String(r?.risk_category || r?.risk_band || r?.riskBand || "UNKNOWN")
-    .trim()
-    .toUpperCase();
-  if (raw === "VERY HIGH" || raw === "VERY-HIGH") return "VERY_HIGH";
-  if (["LOW", "MEDIUM", "HIGH", "VERY_HIGH"].includes(raw)) return raw;
-  return "UNKNOWN";
-}
-
-function Pill({ children, tone = "neutral" }) {
-  const style =
-    tone === "good"
-      ? { bg: "#ecfeff", bd: "#a5f3fc", tx: "#155e75" }
-      : tone === "warn"
-      ? { bg: "#fffbeb", bd: "#fde68a", tx: "#92400e" }
-      : tone === "bad"
-      ? { bg: "#fff1f2", bd: "#fecdd3", tx: "#9f1239" }
-      : { bg: "#f1f5f9", bd: "#e2e8f0", tx: "#0f172a" };
-
-  return (
-    <span
-      style={{
-        padding: "6px 10px",
-        borderRadius: 999,
-        border: `1px solid ${style.bd}`,
-        background: style.bg,
-        color: style.tx,
-        fontWeight: 900,
-        fontSize: 12,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function CardShell({ title, children, right }) {
-  return (
-    <div
-      style={{
-        background: "white",
-        border: "1px solid #e2e8f0",
-        borderRadius: 16,
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ fontWeight: 900 }}>{title}</div>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export function InspectionReadinessWidget() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -183,7 +16,7 @@ export function InspectionReadinessWidget() {
         // 1) Load customers (lightweight fields)
         const { data: customers, error: custErr } = await supabase
           .from("customers")
-          .select("id, full_name, cnic, city_district, screening_status, screening_done, screening_result")
+          .select("id, full_name, cnic, city_district")
           .order("created_at", { ascending: false })
           .limit(100);
 
@@ -231,9 +64,7 @@ export function InspectionReadinessWidget() {
         // 4) Compute readiness per customer using your existing readiness engine
         const scored = list.map((c) => {
           const risk = latestRiskByCustomer.get(c.id) || null;
-          const screeningDone = Boolean(
-            c.screening_status || c.screening_done || c.screening_result
-          );
+          const screeningDone = false; // v1: screening evidence not yet wired on dashboard
 
           const readiness = computeInspectionReadiness({
             kycComplete: isKycComplete(c),

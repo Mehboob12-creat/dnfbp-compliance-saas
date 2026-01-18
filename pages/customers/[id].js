@@ -41,6 +41,11 @@ export default function CustomerView() {
 
       setData({ customer, latestTransaction: txns?.[0] || null });
       setMsg("");
+
+      // Remember last viewed customer for dashboard quick actions (premium UX)
+      try {
+        localStorage.setItem("lastCustomerId", customer.id);
+      } catch {}
     }
 
     load();

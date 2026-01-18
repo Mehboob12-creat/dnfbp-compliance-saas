@@ -5,8 +5,19 @@ import { useRouter } from "next/router";
 // Step 1 readiness engine (already added in utils/inspection/readiness.js)
 import { computeInspectionReadiness } from "../../utils/inspection/readiness";
 
-// ✅ Supabase client (your project’s pattern)
+// ✅ Supabase client (your project's pattern)
 import { supabase } from "../../utils/supabase";
+
+const TRAINING_VALID_DAYS = 365;
+
+function isWithinDays(isoDate, days) {
+  if (!isoDate) return false;
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return d >= cutoff;
+}
 
 // ----------------------
 // Premium UI primitives
@@ -176,9 +187,18 @@ export default function InspectionModePage() {
   const [customer, setCustomer] = useState(null);
   const [risk, setRisk] = useState(null);
   const [txCount, setTxCount] = useState(0);
+  
+  // NEW: real training evidence for logged-in user
+  const [trainingEvidence, setTrainingEvidence] = useState({
+    completed: false,
+    certificateUrl: null,
+    completedAt: null,
+    moduleId: null,
+    moduleVersion: null,
+  });
 
   // ----------------------
-  // Fetch inspection data (v1)
+  // Fetch inspection data (v1) - UPDATED with training evidence
   // ----------------------
   useEffect(() => {
     if (!customerId) return;
@@ -190,8 +210,14 @@ export default function InspectionModePage() {
       setLoadError("");
 
       try {
-        // 1) Customer record
-        // If your table name differs, update "customers"
+        // 1) Auth user
+        const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+        if (sessionErr) {
+          console.error("Inspection: session error", sessionErr);
+        }
+        const user = sessionData?.session?.user || null;
+
+        // 2) Customer record
         const customerRes = await supabase
           .from("customers")
           .select("*")
@@ -200,8 +226,7 @@ export default function InspectionModePage() {
 
         if (customerRes.error) throw customerRes.error;
 
-        // 2) Latest risk record
-        // If your risk table name differs, update "risk_assessments"
+        // 3) Latest risk record
         const riskRes = await supabase
           .from("risk_assessments")
           .select("*")
@@ -210,8 +235,7 @@ export default function InspectionModePage() {
           .limit(1)
           .maybeSingle();
 
-        // 3) Transaction count
-        // If your transactions table name differs, update "transactions"
+        // 4) Transaction count
         const txRes = await supabase
           .from("transactions")
           .select("id", { count: "exact", head: true })
@@ -219,11 +243,49 @@ export default function InspectionModePage() {
 
         if (txRes.error) throw txRes.error;
 
+        // 5) NEW: training evidence (logged-in user)
+        let training = {
+          completed: false,
+          certificateUrl: null,
+          completedAt: null,
+          moduleId: null,
+          moduleVersion: null,
+        };
+
+        if (user?.id) {
+          const { data: trainingRow, error: trainingErr } = await supabase
+            .from("training_completions")
+            .select("id, user_id, module_id, module_version, completed_at, passed, score, certificate_url, created_at")
+            .eq("user_id", user.id)
+            .order("completed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (trainingErr) {
+            // Inspection-safe: treat as not available (do not crash the page)
+            console.error("Training evidence query error", trainingErr);
+          } else if (trainingRow) {
+            const completedAt = trainingRow.completed_at || trainingRow.created_at;
+            const hasCert = !!trainingRow.certificate_url;
+            const passedOrComplete = trainingRow.passed === true || !!trainingRow.completed_at || !!trainingRow.created_at;
+            const withinValidity = isWithinDays(completedAt, TRAINING_VALID_DAYS);
+
+            training = {
+              completed: !!(hasCert && passedOrComplete && withinValidity),
+              certificateUrl: trainingRow.certificate_url || null,
+              completedAt: completedAt || null,
+              moduleId: trainingRow.module_id || null,
+              moduleVersion: trainingRow.module_version || null,
+            };
+          }
+        }
+
         if (cancelled) return;
 
         setCustomer(customerRes.data || null);
         setRisk(riskRes?.data || null);
         setTxCount(txRes.count || 0);
+        setTrainingEvidence(training);
       } catch (e) {
         if (cancelled) return;
         setLoadError(e?.message || "Failed to load inspection data.");
@@ -241,14 +303,14 @@ export default function InspectionModePage() {
   }, [customerId]);
 
   // ----------------------
-  // Compute readiness (Step 1 engine)
+  // Compute readiness (Step 1 engine) - UPDATED with training evidence
   // ----------------------
   const readiness = useMemo(() => {
     const riskBand = normalizeRiskBandFromRiskRow(risk);
 
     // screeningDone:
     // If you store screening results elsewhere, wire it here later.
-    // For now, it checks common “screening present” fields.
+    // For now, it checks common "screening present" fields.
     const screeningDone = Boolean(
       customer?.screening_status ||
         customer?.screening_done ||
@@ -262,13 +324,13 @@ export default function InspectionModePage() {
       screeningDone,
       riskSaved: Boolean(risk?.id),
       riskBand,
-
-      // v1 placeholders (we’ll connect properly when Evidence Locker/Training/Policy ship)
-      eddEvidenceUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
-      trainingCompleted: Boolean(customer?.training_completed || customer?.trainingCompleted),
+      
+      // Updated with real training evidence
+      eddDocsUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
+      trainingCompleted: !!trainingEvidence.completed,
       policyExists: Boolean(customer?.policy_exists || customer?.policyExists),
     });
-  }, [customer, risk, txCount]);
+  }, [customer, risk, txCount, trainingEvidence]);
 
   return (
     <Container>
@@ -291,58 +353,58 @@ export default function InspectionModePage() {
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <Button
-  disabled={!customerId || loading}
-  onClick={async () => {
-    try {
-      // Get logged-in session token from Supabase
-      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-      if (sessionErr) throw sessionErr;
+            disabled={!customerId || loading}
+            onClick={async () => {
+              try {
+                // Get logged-in session token from Supabase
+                const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+                if (sessionErr) throw sessionErr;
 
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) {
-        alert("Your session has expired. Please log in again.");
-        return;
-      }
+                const accessToken = sessionData?.session?.access_token;
+                if (!accessToken) {
+                  alert("Your session has expired. Please log in again.");
+                  return;
+                }
 
-      const resp = await fetch("/api/inspection-pack", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ customerId }),
-      });
+                const resp = await fetch("/api/inspection-pack", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                  },
+                  body: JSON.stringify({ customerId }),
+                });
 
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => null);
-        const msg = errJson?.detail || errJson?.error || `Failed with status ${resp.status}`;
-        alert(msg);
-        return;
-      }
+                if (!resp.ok) {
+                  const errJson = await resp.json().catch(() => null);
+                  const msg = errJson?.detail || errJson?.error || `Failed with status ${resp.status}`;
+                  alert(msg);
+                  return;
+                }
 
-      // Download ZIP
-      const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+                // Download ZIP
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
 
-      // Try to get filename from header
-      const cd = resp.headers.get("content-disposition") || "";
-      const match = cd.match(/filename="([^"]+)"/);
-      a.download = match?.[1] || `inspection_pack_${customerId}.zip`;
+                // Try to get filename from header
+                const cd = resp.headers.get("content-disposition") || "";
+                const match = cd.match(/filename="([^"]+)"/);
+                a.download = match?.[1] || `inspection_pack_${customerId}.zip`;
 
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(e?.message || "Failed to download inspection pack.");
-    }
-  }}
-  title="Downloads an inspection pack ZIP containing readiness summary and evidence snapshots."
->
-  Download Inspection Pack (ZIP)
-</Button>
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (e) {
+                alert(e?.message || "Failed to download inspection pack.");
+              }
+            }}
+            title="Downloads an inspection pack ZIP containing readiness summary and evidence snapshots."
+          >
+            Download Inspection Pack (ZIP)
+          </Button>
         </div>
       </div>
 
@@ -381,7 +443,7 @@ export default function InspectionModePage() {
                     {customer?.full_name || customer?.name || "Unnamed customer"}
                   </div>
                   <div style={{ marginTop: 6, opacity: 0.78 }}>
-                    CNIC: {customer?.cnic || "—"} · City/District: {customer?.city || customer?.district || "—"}
+                    CNIC: {customer?.cnic || "-"} · City/District: {customer?.city || customer?.district || "-"}
                   </div>
                 </div>
 
@@ -398,7 +460,7 @@ export default function InspectionModePage() {
               <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                 <div style={{ fontSize: 34, fontWeight: 800 }}>{readiness.score}</div>
                 <div style={{ opacity: 0.85 }}>
-                  <div style={{ fontWeight: 650 }}>{bandLabel(readiness.band)}</div>
+                  <div style={{ fontWeight: 650 }}>{readiness.summary}</div>
                   <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
                     Evidence coverage score (inspection preparation)
                   </div>
@@ -417,19 +479,19 @@ export default function InspectionModePage() {
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 750 }}>Evidence checklist</div>
                   <div style={{ marginTop: 6, opacity: 0.78, maxWidth: 900, lineHeight: 1.5 }}>
-                    Each item reflects whether key evidence is available for export. Items may be marked “Not required”
+                    Each item reflects whether key evidence is available for export. Items may be marked "Not required"
                     based on risk band (for example, EDD for LOW/MEDIUM cases).
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <Badge>Generated: {new Date(readiness.generatedAtISO).toLocaleString()}</Badge>
+                  <Badge>Generated: {new Date().toLocaleString()}</Badge>
                 </div>
               </div>
 
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {readiness.items.map((it) => (
+                {readiness.checklist.map((item) => (
                   <div
-                    key={it.key}
+                    key={item.key}
                     style={{
                       borderRadius: 16,
                       border: "1px solid rgba(255,255,255,0.10)",
@@ -438,19 +500,26 @@ export default function InspectionModePage() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ fontWeight: 750 }}>{it.title}</div>
+                      <div style={{ fontWeight: 750 }}>{item.label}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ color: statusColor(it.status) }}>●</span>
-                        <span style={{ fontSize: 12, opacity: 0.85 }}>{statusLabel(it.status)}</span>
+                        <span style={{ color: statusColor(item.status ? "OK" : "PENDING") }}>●</span>
+                        <span style={{ fontSize: 12, opacity: 0.85 }}>{item.status ? "Available" : "Pending"}</span>
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 8, opacity: 0.8, lineHeight: 1.45 }}>{it.note}</div>
+                    <div style={{ marginTop: 8, opacity: 0.8, lineHeight: 1.45 }}>{item.note}</div>
+                    
+                    {/* Training certificate details */}
+                    {item.key === "trainingCompleted" && trainingEvidence?.certificateUrl && (
+                      <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7, lineHeight: 1.4 }}>
+                        Certificate recorded{trainingEvidence.completedAt ? ` (completed: ${new Date(trainingEvidence.completedAt).toLocaleDateString()})` : ""}
+                      </div>
+                    )}
 
                     <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", opacity: 0.75 }}>
-                      <span>Points</span>
+                      <span>Score impact</span>
                       <span style={{ fontWeight: 650 }}>
-                        {it.pointsAwarded} / {it.weight}
+                        {item.status ? "✓" : "✗"}
                       </span>
                     </div>
                   </div>
@@ -461,10 +530,13 @@ export default function InspectionModePage() {
             {/* Inspection-safe notes */}
             <Card>
               <div style={{ fontSize: 16, fontWeight: 750 }}>Inspection-safe notes</div>
-              <ul style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.6 }}>
-                {readiness.inspectionSafeSummary.map((line, idx) => (
-                  <li key={idx}>{line}</li>
-                ))}
+              <div style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.6 }}>
+                {readiness.summary}
+              </div>
+              <ul style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.6, paddingLeft: 20 }}>
+                <li>This readiness score reflects evidence coverage for inspection preparation and internal recordkeeping.</li>
+                <li>Regulatory reporting decisions (e.g., STR/CTR) remain subject to human review and approval.</li>
+                <li>This platform supports drafting and organizing evidence; it does not file reports or communicate with regulators automatically.</li>
               </ul>
             </Card>
           </div>

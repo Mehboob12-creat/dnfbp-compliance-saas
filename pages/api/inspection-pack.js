@@ -96,6 +96,13 @@ function getSupabaseAnonKey() {
   );
 }
 
+async function fetchBinary(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -339,6 +346,72 @@ export default async function handler(req, res) {
       name: `${baseFolder}/04_Risk_Assessment.pdf`,
     });
 
+    // =========================
+    // NEW: Training certificate
+    // =========================
+    let addedTrainingEvidence = false;
+    
+    if (supabaseUrl && supabaseAnonKey && accessToken) {
+      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      });
+
+      // Resolve logged-in user from token (inspection-safe; no assumptions)
+      const { data: userData, error: userErr } = await userSupabase.auth.getUser(accessToken);
+      const user = userData?.user || null;
+
+      if (!userErr && user?.id) {
+        const { data: trainingRow, error: trainingErr } = await userSupabase
+          .from("training_completions")
+          .select("certificate_url, completed_at, created_at, passed, module_id, module_version")
+          .eq("user_id", user.id)
+          .order("completed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!trainingErr && trainingRow?.certificate_url) {
+          try {
+            // If certificate_url is a full URL, fetch directly.
+            // If it is a storage path, your app should ideally store a signed/public URL.
+            // We treat it as a URL here; fallback stays inspection-safe.
+            const certBuf = await fetchBinary(trainingRow.certificate_url);
+
+            archive.append(certBuf, {
+              name: `${baseFolder}/06_Training_Certificate.pdf`,
+            });
+            addedTrainingEvidence = true;
+          } catch (e) {
+            // If fetch fails, fall back to placeholder (inspection-safe)
+            console.error("Training certificate fetch failed", e);
+          }
+        }
+      }
+    }
+
+    if (!addedTrainingEvidence) {
+      // Inspection-safe placeholder (neutral, factual)
+      archive.append(
+        [
+          "Training Evidence",
+          "",
+          "Training completion certificate was not available for inclusion in this inspection pack based on the current user session and available records.",
+          "",
+          "Suggested action:",
+          "- Complete the assigned AML/CFT training module and generate the training certificate for inspection records.",
+          "",
+          "Note: This platform does not submit anything to regulators. All regulatory actions remain human-controlled.",
+          "",
+        ].join("\n"),
+        {
+          name: `${baseFolder}/06_Training_Evidence_Pending.txt`,
+        }
+      );
+    }
+
     // ---- Inspection Register (CSV) ----
     // Inspection-safe export record for audits/inspections.
     // This is a snapshot generated at export time.
@@ -429,13 +502,16 @@ export default async function handler(req, res) {
       { name: `${baseFolder}/90_Policy_PLACEHOLDER.txt` }
     );
 
-    archive.append(
-      placeholderText(
-        "Training Evidence",
-        "Attach training completion evidence (e.g., certificate, attendance logs) for relevant staff roles (or generate via Training module when implemented)."
-      ),
-      { name: `${baseFolder}/91_Training_PLACEHOLDER.txt` }
-    );
+    // Updated: Only include training placeholder if no certificate was added
+    if (!addedTrainingEvidence) {
+      archive.append(
+        placeholderText(
+          "Training Evidence",
+          "Attach training completion evidence (e.g., certificate, attendance logs) for relevant staff roles (or generate via Training module when implemented)."
+        ),
+        { name: `${baseFolder}/91_Training_PLACEHOLDER.txt` }
+      );
+    }
 
     const eddItem = readiness.items.find((x) => x.key === "edd_evidence");
     const eddMissing = eddItem && eddItem.status === "PENDING";

@@ -292,8 +292,52 @@ export default function InspectionModePage() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <Button
   disabled={!customerId || loading}
-  onClick={() => {
-    window.location.href = `/api/inspection-pack?customerId=${customerId}`;
+  onClick={async () => {
+    try {
+      // Get logged-in session token from Supabase
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
+
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        alert("Your session has expired. Please log in again.");
+        return;
+      }
+
+      const resp = await fetch("/api/inspection-pack", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ customerId }),
+      });
+
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => null);
+        const msg = errJson?.detail || errJson?.error || `Failed with status ${resp.status}`;
+        alert(msg);
+        return;
+      }
+
+      // Download ZIP
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      // Try to get filename from header
+      const cd = resp.headers.get("content-disposition") || "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] || `inspection_pack_${customerId}.zip`;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e?.message || "Failed to download inspection pack.");
+    }
   }}
   title="Downloads an inspection pack ZIP containing readiness summary and evidence snapshots."
 >

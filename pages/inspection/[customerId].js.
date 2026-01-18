@@ -291,12 +291,14 @@ export default function InspectionModePage() {
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <Button
-            disabled
-            onClick={() => {}}
-            title="ZIP export will be implemented in Step 3."
-          >
-            Download Inspection Pack (ZIP) — coming next
-          </Button>
+  disabled={!customerId || loading}
+  onClick={() => {
+    window.location.href = `/api/inspection-pack?customerId=${customerId}`;
+  }}
+  title="Downloads an inspection pack ZIP containing readiness summary and evidence snapshots."
+>
+  Download Inspection Pack (ZIP)
+</Button>
         </div>
       </div>
 

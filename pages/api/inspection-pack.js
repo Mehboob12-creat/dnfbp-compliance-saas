@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import archiver from "archiver";
 import { computeInspectionReadiness } from "../../utils/inspection/readiness";
 import { createClient } from "@supabase/supabase-js";

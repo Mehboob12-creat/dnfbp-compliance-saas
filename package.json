@@ -13,5 +13,8 @@
     "react-dom": "18.2.0",
     "jspdf": "^2.5.1",
     "archiver": "^6.0.2"
+  },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.8.1"
   }
 }

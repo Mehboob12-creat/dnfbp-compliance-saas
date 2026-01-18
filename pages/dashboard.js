@@ -61,7 +61,11 @@ export default function Dashboard() {
             desc="15-question wizard (start here)."
             href="/customers"
           />
-          <Card title="Training Modules" desc="Videos + quizzes (next step)." />
+          <CardLink
+            title="Training Modules"
+            desc="Videos + quizzes (next step)."
+            href="/training"
+          />
           <CardLink
             title="Important Links"
             desc="FMU, FATF, UN, NACTA (next step)."

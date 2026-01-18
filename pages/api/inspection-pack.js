@@ -1,6 +1,6 @@
 import archiver from "archiver";
 import { computeInspectionReadiness } from "../../utils/inspection/readiness";
-import { supabase } from "../../utils/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 function safeText(x) {
   return typeof x === "string" ? x.trim() : "";
@@ -55,13 +55,6 @@ function buildInspectionSafeReadme({ customerId, customerName }) {
     `Customer Name: ${customerName || "—"}`,
     `Export Date (UTC): ${new Date().toISOString()}`,
     "",
-    "Contents:",
-    "- Readiness Summary (score + checklist)",
-    "- Customer Record Snapshot",
-    "- Transactions Summary Snapshot",
-    "- Risk Record Snapshot",
-    "- Placeholders (where applicable)",
-    "",
   ];
   return lines.join("\n");
 }
@@ -81,80 +74,129 @@ function placeholderText(title, guidance) {
   ].join("\n");
 }
 
+function getEnv(name) {
+  return process.env[name];
+}
+
+function getSupabaseUrl() {
+  return (
+    getEnv("NEXT_PUBLIC_SUPABASE_URL") ||
+    getEnv("SUPABASE_URL") ||
+    ""
+  );
+}
+
+function getSupabaseAnonKey() {
+  return (
+    getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") ||
+    getEnv("NEXT_PUBLIC_SUPABASE_KEY") ||
+    getEnv("SUPABASE_ANON_KEY") ||
+    ""
+  );
+}
+
 export default async function handler(req, res) {
   try {
-    if (req.method !== "GET") {
+    if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
       return;
     }
 
-    const customerId = safeText(req.query.customerId);
-    if (!customerId) {
-      res.status(400).json({ error: "Missing customerId" });
+    const auth = safeText(req.headers.authorization || "");
+    if (!auth.toLowerCase().startsWith("bearer ")) {
+      res.status(401).json({
+        error: "Unauthorized",
+        detail: "Missing Authorization bearer token.",
+      });
       return;
     }
 
-    // 1) Load customer
-    // Validate UUID early (prevents "<CUSTOMER_ID>" mistakes)
-const uuidRegex =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const accessToken = auth.slice("bearer ".length).trim();
+    const { customerId } = req.body || {};
+    const id = safeText(customerId);
 
-if (!uuidRegex.test(customerId)) {
-  res.status(400).json({
-    error: "Invalid customerId",
-    detail: "The customerId must be a UUID. Open Inspection Mode from a real customer record.",
-  });
-  return;
-}
+    // Validate UUID (friendly error)
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// 1) Load customer (robust: do not use .single())
-const customerRes = await supabase
-  .from("customers")
-  .select("*")
-  .eq("id", customerId)
-  .limit(1);
+    if (!uuidRegex.test(id)) {
+      res.status(400).json({
+        error: "Invalid customerId",
+        detail: "The customerId must be a UUID.",
+      });
+      return;
+    }
 
-if (customerRes.error) throw customerRes.error;
+    const supabaseUrl = getSupabaseUrl();
+    const supabaseAnonKey = getSupabaseAnonKey();
 
-const customer = Array.isArray(customerRes.data)
-  ? customerRes.data[0]
-  : null;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      res.status(500).json({
+        error: "Server misconfiguration",
+        detail: "Supabase URL / anon key env vars are missing in this deployment.",
+      });
+      return;
+    }
 
-if (!customer) {
-  res.status(404).json({
-    error: "Customer not found",
-    detail: "No customer record exists for the provided customerId.",
-  });
-  return;
-}
+    // Create a Supabase client that runs queries AS the logged-in user (RLS-safe)
+    const authedSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
 
-    // 2) Load latest risk (adjust table name here if needed)
-    const riskRes = await supabase
+    // 1) Load customer (RLS applies)
+    const customerRes = await authedSupabase
+      .from("customers")
+      .select("*")
+      .eq("id", id)
+      .limit(1);
+
+    if (customerRes.error) throw customerRes.error;
+
+    const customer = Array.isArray(customerRes.data) ? customerRes.data[0] : null;
+    if (!customer) {
+      res.status(404).json({
+        error: "Customer not found",
+        detail:
+          "No customer record exists for this customerId under the current account (RLS).",
+      });
+      return;
+    }
+
+    // 2) Latest risk (adjust table name here if needed)
+    const riskRes = await authedSupabase
       .from("risk_assessments")
       .select("*")
-      .eq("customer_id", customerId)
+      .eq("customer_id", id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     const risk = riskRes?.data || null;
 
-    // 3) Transactions count + small sample (adjust table name here if needed)
-    const txCountRes = await supabase
+    // 3) Transactions count + sample (adjust table name here if needed)
+    const txCountRes = await authedSupabase
       .from("transactions")
       .select("id", { count: "exact", head: true })
-      .eq("customer_id", customerId);
+      .eq("customer_id", id);
 
     if (txCountRes.error) throw txCountRes.error;
 
-    const txSampleRes = await supabase
+    const txSampleRes = await authedSupabase
       .from("transactions")
       .select("*")
-      .eq("customer_id", customerId)
+      .eq("customer_id", id)
       .order("created_at", { ascending: false })
       .limit(25);
 
-    // txSampleRes.error is non-fatal (we can still export count + placeholder)
     const txSample = txSampleRes?.data || [];
 
     // 4) Compute readiness
@@ -171,6 +213,8 @@ if (!customer) {
       screeningDone,
       riskSaved: Boolean(risk?.id),
       riskBand: normalizeRiskBandFromRiskRow(risk),
+
+      // v1 placeholders (we’ll connect properly later)
       eddEvidenceUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
       trainingCompleted: Boolean(customer?.training_completed || customer?.trainingCompleted),
       policyExists: Boolean(customer?.policy_exists || customer?.policyExists),
@@ -178,84 +222,79 @@ if (!customer) {
 
     const dateTag = isoDateOnly(new Date());
     const customerName = safeText(customer?.full_name || customer?.name);
-    const baseFolder = `Inspection_Pack_${toFileSafeName(customerName || customerId)}_${dateTag}`;
+    const baseFolder = `Inspection_Pack_${toFileSafeName(customerName || id)}_${dateTag}`;
 
     // 5) Stream ZIP
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${baseFolder}.zip"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${baseFolder}.zip"`);
 
     const archive = archiver("zip", { zlib: { level: 9 } });
-
     archive.on("error", (err) => {
       throw err;
     });
 
     archive.pipe(res);
 
-    // README
-    archive.append(buildInspectionSafeReadme({ customerId, customerName }), {
+    archive.append(buildInspectionSafeReadme({ customerId: id, customerName }), {
       name: `${baseFolder}/00_README_FOR_INSPECTION.txt`,
     });
 
-    // Readiness summary
     archive.append(JSON.stringify(readiness, null, 2), {
       name: `${baseFolder}/01_Readiness_Summary.json`,
     });
 
-    // Customer snapshot
     archive.append(JSON.stringify(customer, null, 2), {
       name: `${baseFolder}/02_Customer_Record.json`,
     });
 
-    // Transactions summary snapshot
     const txSummary = {
-      customer_id: customerId,
+      customer_id: id,
       count: txCountRes.count || 0,
       sample_latest_25: txSample,
       exported_at: new Date().toISOString(),
       note:
         "This is a snapshot for inspection preparation and internal recordkeeping. It may not include all historical transactions.",
     };
+
     archive.append(JSON.stringify(txSummary, null, 2), {
       name: `${baseFolder}/03_Transactions_Summary.json`,
     });
 
-    // Risk snapshot
     archive.append(JSON.stringify(risk || { note: "No saved risk record found for this customer." }, null, 2), {
       name: `${baseFolder}/04_Risk_Record.json`,
     });
 
     // Placeholders (v1)
-    const policyPlaceholder = placeholderText(
-      "AML/CFT Policy Document",
-      "Attach the approved AML/CFT policy PDF for the DNFBP (or generate via the Policy module when implemented)."
+    archive.append(
+      placeholderText(
+        "AML/CFT Policy Document",
+        "Attach the approved AML/CFT policy PDF for the DNFBP (or generate via the Policy module when implemented)."
+      ),
+      { name: `${baseFolder}/90_Policy_PLACEHOLDER.txt` }
     );
-    archive.append(policyPlaceholder, { name: `${baseFolder}/90_Policy_PLACEHOLDER.txt` });
 
-    const trainingPlaceholder = placeholderText(
-      "Training Evidence",
-      "Attach training completion evidence (e.g., certificate, attendance logs) for relevant staff roles (or generate via Training module when implemented)."
+    archive.append(
+      placeholderText(
+        "Training Evidence",
+        "Attach training completion evidence (e.g., certificate, attendance logs) for relevant staff roles (or generate via Training module when implemented)."
+      ),
+      { name: `${baseFolder}/91_Training_PLACEHOLDER.txt` }
     );
-    archive.append(trainingPlaceholder, { name: `${baseFolder}/91_Training_PLACEHOLDER.txt` });
 
-    // If EDD is required and missing, add EDD placeholder
     const eddItem = readiness.items.find((x) => x.key === "edd_evidence");
     const eddMissing = eddItem && eddItem.status === "PENDING";
     if (eddMissing) {
-      const eddPlaceholder = placeholderText(
-        "Enhanced Due Diligence Evidence (EDD)",
-        "For HIGH/VERY_HIGH risk cases, attach relevant EDD evidence (source of funds documents, approval notes, supporting documentation) and record the reviewer decision."
+      archive.append(
+        placeholderText(
+          "Enhanced Due Diligence Evidence (EDD)",
+          "For HIGH/VERY_HIGH risk cases, attach relevant EDD evidence (source of funds documents, approval notes, supporting documentation) and record the reviewer decision."
+        ),
+        { name: `${baseFolder}/92_EDD_PLACEHOLDER.txt` }
       );
-      archive.append(eddPlaceholder, { name: `${baseFolder}/92_EDD_PLACEHOLDER.txt` });
     }
 
-    // Finalize
     await archive.finalize();
   } catch (err) {
-    // Important: if headers already sent, just end.
     if (res.headersSent) {
       try { res.end(); } catch {}
       return;

@@ -215,7 +215,7 @@ export default async function handler(req, res) {
       riskSaved: Boolean(risk?.id),
       riskBand: normalizeRiskBandFromRiskRow(risk),
 
-      // v1 placeholders (we’ll connect properly later)
+      // v1 placeholders (we'll connect properly later)
       eddEvidenceUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
       trainingCompleted: Boolean(customer?.training_completed || customer?.trainingCompleted),
       policyExists: Boolean(customer?.policy_exists || customer?.policyExists),
@@ -264,46 +264,80 @@ export default async function handler(req, res) {
     archive.append(JSON.stringify(risk || { note: "No saved risk record found for this customer." }, null, 2), {
       name: `${baseFolder}/04_Risk_Record.json`,
     });
-// ---- Risk Assessment PDF (inspection-safe, explainable) ----
-const riskForPdf = risk
-  ? {
-      ...risk,
-      // normalize common fields used by the shared generator
-      score: risk.score ?? risk.overall_score ?? "",
-      risk_band: risk.risk_band || risk.risk_category || risk.risk_category || "UNKNOWN",
-      // If your DB stores breakdown rows differently, this still produces a valid PDF.
-      factors: Array.isArray(risk.score_breakdown)
-        ? risk.score_breakdown
-        : Array.isArray(risk.breakdownRows)
-        ? risk.breakdownRows.map((b) => ({
-            label: b.k,
-            value: `${b.score}/${b.max} — ${b.note}`,
-          }))
-        : undefined,
-    }
-  : { score: "", risk_band: "UNKNOWN" };
 
-const redFlagsForPdf = Array.isArray(risk?.red_flags)
-  ? risk.red_flags.map((rf) => (typeof rf === "string" ? rf : `${rf.flag}: ${rf.description}`))
-  : [];
+    // ---- Risk Assessment PDF (inspection-safe, explainable) ----
+    const riskForPdf = risk
+      ? {
+          ...risk,
+          // normalize common fields used by the shared generator
+          score: risk.score ?? risk.overall_score ?? "",
+          risk_band: risk.risk_band || risk.risk_category || risk.risk_category || "UNKNOWN",
+          // If your DB stores breakdown rows differently, this still produces a valid PDF.
+          factors: (() => {
+            // If DB stores breakdown as an object (score_breakdown), convert to readable lines
+            const sb = risk.score_breakdown;
+            if (sb && typeof sb === "object" && !Array.isArray(sb)) {
+              return Object.entries(sb).map(([k, v]) => ({
+                label: String(k),
+                value: typeof v === "object" ? JSON.stringify(v) : String(v),
+              }));
+            }
 
-const pdfDoc = generateRiskAssessmentPdf({
-  customer: {
-    ...customer,
-    full_name: customer.full_name || customer.name || "-",
-    city: customer.city || customer.city_district || customer.district || "-",
-  },
-  risk: riskForPdf,
-  redFlags: redFlagsForPdf,
-  generatedBy: "Compliance Officer",
-});
+            // If it's already an array of factors, keep as-is
+            if (Array.isArray(sb)) return sb;
 
-// jsPDF -> Buffer (Node)
-const pdfBuffer = Buffer.from(pdfDoc.output("arraybuffer"));
+            return undefined;
+          })(),
+        }
+      : { score: "", risk_band: "UNKNOWN" };
 
-archive.append(pdfBuffer, {
-  name: `${baseFolder}/04_Risk_Assessment.pdf`,
-});
+    const RED_FLAG_DESCRIPTIONS = {
+      CASH_LARGE: "Large cash transaction (higher vulnerability due to limited traceability).",
+      NON_FILER_LARGE: "Non-filer with high-value transaction (documentation gap risk).",
+      INCOME_MISMATCH: "Transaction significantly exceeds declared income (inconsistency indicator).",
+      VAGUE_SOURCE: "Source of funds not clearly identified or documented.",
+      HIGH_RISK_AREA: "Higher geographic vulnerability combined with a high-value transaction.",
+      PEP_CASH: "PEP exposure with cash payment (requires enhanced review).",
+    };
+
+    const redFlagsForPdf = Array.isArray(risk?.red_flags)
+      ? risk.red_flags.map((rf) => {
+          // If stored as string
+          if (typeof rf === "string") {
+            const desc = RED_FLAG_DESCRIPTIONS[rf];
+            return desc ? `${rf}: ${desc}` : rf;
+          }
+
+          // If stored as object
+          const code = rf?.flag || rf?.code || rf?.type || "RED_FLAG";
+          const desc =
+            rf?.description ||
+            rf?.note ||
+            rf?.reason ||
+            RED_FLAG_DESCRIPTIONS[code] ||
+            "Indicator recorded in the system (description not provided).";
+
+          return `${code}: ${desc}`;
+        })
+      : [];
+
+    const pdfDoc = generateRiskAssessmentPdf({
+      customer: {
+        ...customer,
+        full_name: customer.full_name || customer.name || "-",
+        city: customer.city || customer.city_district || customer.district || "-",
+      },
+      risk: riskForPdf,
+      redFlags: redFlagsForPdf,
+      generatedBy: "Compliance Officer",
+    });
+
+    // jsPDF -> Buffer (Node)
+    const pdfBuffer = Buffer.from(pdfDoc.output("arraybuffer"));
+
+    archive.append(pdfBuffer, {
+      name: `${baseFolder}/04_Risk_Assessment.pdf`,
+    });
 
     // Placeholders (v1)
     archive.append(

@@ -176,6 +176,20 @@ export default function CustomerView() {
                 >
                   Download Risk PDF
                 </button>
+
+                <button
+                  onClick={() => {
+                    window.location.href = `/inspection/${data.customer.id}`;
+                  }}
+                  style={{
+                    ...ghostBtn,
+                    fontWeight: 900,
+                    borderColor: "#c7d2fe",
+                  }}
+                  title="Open Inspection Mode for readiness and one-click inspection pack export."
+                >
+                  Inspection Mode
+                </button>
               </div>
             </div>
           ) : null}

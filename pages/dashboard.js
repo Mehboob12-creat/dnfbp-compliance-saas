@@ -94,10 +94,10 @@ function CardLink({ title, desc, href }) {
 }
 
 function isKycComplete(c) {
-  const name = String(c?.full_name || c?.name || "").trim();
+  const name = String(c?.full_name || "").trim();
   const cnic = String(c?.cnic || "").trim();
-  const city = String(c?.city_district || c?.city || c?.district || "").trim();
-  return Boolean(name && cnic && city);
+  const cityDistrict = String(c?.city_district || "").trim();
+  return Boolean(name && cnic && cityDistrict);
 }
 
 function normalizeRiskBand(r) {
@@ -183,7 +183,7 @@ export function InspectionReadinessWidget() {
         // 1) Load customers (lightweight fields)
         const { data: customers, error: custErr } = await supabase
           .from("customers")
-          .select("id, full_name, cnic, city_district, city, district, screening_status, screening_done, screening_result")
+          .select("id, full_name, cnic, city_district, screening_status, screening_done, screening_result")
           .order("created_at", { ascending: false })
           .limit(100);
 

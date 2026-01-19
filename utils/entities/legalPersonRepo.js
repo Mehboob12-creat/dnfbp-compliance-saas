@@ -1,5 +1,6 @@
 // utils/entities/legalPersonRepo.js
 import { supabase } from "../supabase";
+import { logAuditEvent } from "../audit/logEvent";
 
 /**
  * Small helper to normalize Supabase "no rows" situations without crashing.
@@ -73,6 +74,15 @@ export async function createLegalPersonDraft(payload) {
     .single();
 
   if (error) throw error;
+
+  // Audit log: Entity created
+  await logAuditEvent({
+    action: "legal_person.created",
+    summary: `Created legal person record: ${row.name}.`,
+    object_type: "legal_person",
+    object_id: data.id,
+  });
+
   return data;
 }
 
@@ -108,6 +118,19 @@ export async function updateLegalPerson(legalPersonId, patch) {
     .single();
 
   if (error) throw error;
+
+  // Audit log: Entity updated
+  await logAuditEvent({
+    action: "legal_person.updated",
+    summary: `Updated legal person record: ${data.name}.`,
+    object_type: "legal_person",
+    object_id: data.id,
+    metadata: {
+      changed_fields: Object.keys(update).filter(k => k !== 'updated_at'),
+      new_status: data.status
+    }
+  });
+
   return data;
 }
 
@@ -159,7 +182,10 @@ export async function upsertAssociate(legalPersonId, associate) {
 
   if (!clean.role) throw new Error("Associate role is required.");
 
-  if (associate?.id) {
+  let result;
+  const isUpdate = !!associate?.id;
+
+  if (isUpdate) {
     const { data, error } = await supabase
       .from("legal_person_associates")
       .update(clean)
@@ -167,28 +193,67 @@ export async function upsertAssociate(legalPersonId, associate) {
       .select("*")
       .single();
     if (error) throw error;
-    return data;
+    result = data;
+  } else {
+    clean.created_at = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("legal_person_associates")
+      .insert([clean])
+      .select("*")
+      .single();
+    if (error) throw error;
+    result = data;
   }
 
-  clean.created_at = new Date().toISOString();
+  // Audit log: Associate added/updated
+  await logAuditEvent({
+    action: isUpdate ? "legal_person.associate.updated" : "legal_person.associate.created",
+    summary: `${isUpdate ? 'Updated' : 'Added'} associate (${clean.role}) for legal person.`,
+    object_type: "legal_person",
+    object_id: legalPersonId,
+    metadata: { 
+      role: clean.role,
+      ownership_percent: clean.ownership_percent,
+      is_indirect: clean.is_indirect,
+      associate_id: result.id
+    }
+  });
 
-  const { data, error } = await supabase
-    .from("legal_person_associates")
-    .insert([clean])
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data;
+  return result;
 }
 
 export async function deleteAssociate(associateId) {
   requireId(associateId, "associateId");
+  
+  // Get associate info for audit log before deletion
+  const { data: associateData } = await supabase
+    .from("legal_person_associates")
+    .select("legal_person_id, role")
+    .eq("id", associateId)
+    .single()
+    .catch(() => ({ data: null }));
+
   const { error } = await supabase
     .from("legal_person_associates")
     .delete()
     .eq("id", associateId);
+
   if (error) throw error;
+
+  // Audit log: Associate removed
+  if (associateData) {
+    await logAuditEvent({
+      action: "legal_person.associate.deleted",
+      summary: `Removed associate (${associateData.role}) from legal person.`,
+      object_type: "legal_person",
+      object_id: associateData.legal_person_id,
+      metadata: { 
+        role: associateData.role,
+        deleted_associate_id: associateId
+      }
+    });
+  }
+
   return true;
 }
 
@@ -262,5 +327,53 @@ export async function updateMiniKyc(associateId, patch) {
     .single();
 
   if (error) throw error;
+
+  // Audit log: Mini-KYC updated
+  await logAuditEvent({
+    action: "legal_person.mini_kyc.updated",
+    summary: `Updated mini-KYC details for associate.`,
+    object_type: "legal_person_associate",
+    object_id: associateId,
+    metadata: {
+      changed_fields: Object.keys(update).filter(k => k !== 'updated_at'),
+      has_full_name: !!update.full_name,
+      has_cnic: !!update.cnic
+    }
+  });
+
   return data;
+}
+
+/**
+ * Logs export activities (CSV/PDF)
+ */
+export async function logLegalPersonExport(legalPersonId, exportType, format) {
+  requireId(legalPersonId, "legalPersonId");
+  
+  const { data: legalPerson } = await getLegalPerson(legalPersonId).catch(() => ({ name: 'Unknown' }));
+  
+  await logAuditEvent({
+    action: `legal_person.${exportType}.exported`,
+    summary: `Exported ${format.toUpperCase()} ${exportType} for legal person: ${legalPerson.name || 'Unknown'}.`,
+    object_type: "legal_person",
+    object_id: legalPersonId,
+    metadata: {
+      format: format,
+      export_type: exportType
+    }
+  });
+}
+
+/**
+ * Convenience function to log CSV exports
+ */
+export async function logCSVExport(legalPersonId, exportType = "report") {
+  return logLegalPersonExport(legalPersonId, exportType, "csv");
+}
+
+/**
+ * Convenience function to log PDF exports
+ */
+export async function logPDFExport(legalPersonId, exportType = "report") {
+  return logLegalPersonExport(legalPersonId, exportType, "pdf");
 }

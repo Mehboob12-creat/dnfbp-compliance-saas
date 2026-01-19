@@ -23,6 +23,8 @@ try {
   computeLegalPersonRisk = null;
 }
 
+import EvidenceLocker from "../../components/evidence/EvidenceLocker";
+
 const styles = {
   page: { padding: 24, maxWidth: 1200, margin: "0 auto" },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" },
@@ -72,6 +74,7 @@ const TABS = [
   { key: "overview", label: "Overview" },
   { key: "ownership", label: "Ownership & UBO" },
   { key: "controllers", label: "Controllers" },
+  { key: "evidence", label: "Evidence" },
   { key: "exports", label: "Exports" },
 ];
 
@@ -964,6 +967,14 @@ export default function EntityDetailPage() {
               </div>
             </div>
           </div>
+        ) : null}
+
+        {activeTab === "evidence" ? (
+          <EvidenceLocker
+            object_type="legal_person"
+            object_id={id}
+            title="Evidence Locker (Entity)"
+          />
         ) : null}
 
         {activeTab === "exports" ? (

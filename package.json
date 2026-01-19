@@ -4,17 +4,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "jspdf": "^2.5.1",
+    "jszip": "^3.10.1",
     "next": "14.2.5",
     "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "jspdf": "^2.5.1",
-    "archiver": "^6.0.2"
-  },
-  "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.8.1"
+    "react-dom": "18.2.0"
   }
 }

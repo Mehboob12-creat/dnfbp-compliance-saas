@@ -49,31 +49,6 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Policy Generator Quick Action Card */}
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            <Link href="/policy" style={{ textDecoration: "none" }}>
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  borderRadius: 18,
-                  padding: 16,
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-                  cursor: "pointer",
-                }}
-                title="Draft, review, and export an AML/CFT policy (human-reviewed)."
-              >
-                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Quick Action</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#e5e7eb" }}>Policy Generator</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.8, lineHeight: 1.45 }}>
-                  Create a draft, review internally, and export as PDF for inspection preparation.
-                </div>
-              </div>
-            </Link>
-          </div>
-        </div>
-
         <div
           style={{
             display: "grid",
@@ -100,8 +75,11 @@ export default function Dashboard() {
           <Card title="Inspection Mode" desc="Readiness score + pack export (next step)." />
         </div>
 
-        {/* Add the Inspection Readiness Widget */}
-        <InspectionReadinessWidget />
+        {/* Two-column layout for main widgets */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14, marginBottom: 24 }}>
+          <InspectionReadinessWidget />
+          <NoticesDueSoonWidget />
+        </div>
         
         {/* Add the Inspection Quick Actions Card */}
         <InspectionQuickActionsCard />
@@ -518,6 +496,180 @@ function InspectionQuickActionsCard() {
             Policy Generator
           </button>
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function NoticesDueSoonWidget() {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setLoading(true);
+      setErr("");
+
+      try {
+        const { data: userData, error: userErr } = await supabase.auth.getUser();
+        if (userErr) throw userErr;
+        if (!userData?.user) return;
+
+        // Due within next 14 days (inspection-safe planning horizon)
+        const now = new Date();
+        const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+        const start = now.toISOString().slice(0, 10);
+        const end = future.toISOString().slice(0, 10);
+
+        const { data, error } = await supabase
+          .from("regulator_notices")
+          .select("id, regulator_name, reference_no, response_deadline, status, created_at")
+          .gte("response_deadline", start)
+          .lte("response_deadline", end)
+          .order("response_deadline", { ascending: true })
+          .limit(6);
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        setRows(data || []);
+      } catch (e) {
+        if (cancelled) return;
+        setErr(e?.message || "Unable to load notices.");
+      } finally {
+        if (cancelled) return;
+        setLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const badgeStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    color: "#e5e7eb",
+    letterSpacing: 0.2,
+    whiteSpace: "nowrap",
+  };
+
+  const cardStyle = {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    padding: 18,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+  };
+
+  const rowStyle = {
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.03)",
+    padding: 12,
+    display: "grid",
+    gap: 6,
+  };
+
+  const statusLabel = (s) => {
+    const v = String(s || "").toUpperCase();
+    if (v === "RECEIVED") return "Received";
+    if (v === "UNDER_REVIEW") return "Under review";
+    if (v === "RESPONSE_DRAFTED") return "Response drafted";
+    if (v === "DELIVERED") return "Delivered to client";
+    return "Received";
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Regulator notices</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Notices due soon</div>
+          <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.5 }}>
+            Tracks deadlines for internal planning. Responses are drafted and delivered for client submission (no regulator integration).
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <span style={badgeStyle}>{rows.length} items</span>
+
+          <Link href="/notices" style={{ textDecoration: "none" }}>
+            <button
+              style={{
+                borderRadius: 14,
+                padding: "12px 14px",
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(199,210,254,0.18)",
+                color: "#e5e7eb",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+              title="Open Regulator Notices module"
+            >
+              Open Notices
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+        {loading ? (
+          <div style={{ opacity: 0.85 }}>Loading…</div>
+        ) : err ? (
+          <div style={{ opacity: 0.85 }}>{err}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ opacity: 0.85 }}>No deadlines recorded within the next 14 days.</div>
+        ) : (
+          rows.map((r) => (
+            <div key={r.id} style={rowStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800 }}>
+                  {r.regulator_name || "Regulator"}
+                  {r.reference_no ? <span style={{ opacity: 0.75, fontWeight: 650 }}> • {r.reference_no}</span> : null}
+                </div>
+                <span style={badgeStyle}>{statusLabel(r.status)}</span>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, opacity: 0.82 }}>
+                <span>
+                  Deadline:{" "}
+                  {r.response_deadline ? new Date(r.response_deadline).toLocaleDateString() : "—"}
+                </span>
+                <span>Created: {r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</span>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Link href={`/notices/${r.id}`} style={{ textDecoration: "none" }}>
+                  <button
+                    style={{
+                      borderRadius: 14,
+                      padding: "10px 12px",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.08)",
+                      color: "#e5e7eb",
+                      fontWeight: 750,
+                      cursor: "pointer",
+                    }}
+                    title="Open notice details and draft response"
+                  >
+                    Open
+                  </button>
+                </Link>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

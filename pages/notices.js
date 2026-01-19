@@ -149,6 +149,7 @@ export default function NoticesPage() {
   const [referenceNo, setReferenceNo] = useState("");
   const [noticeDate, setNoticeDate] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [noticeFile, setNoticeFile] = useState(null);
   const [noticeText, setNoticeText] = useState("");
 
   const totalCount = rows.length;
@@ -202,6 +203,32 @@ export default function NoticesPage() {
         return;
       }
 
+      // 1) Optional upload (PDF)
+      let noticeFilePath = null;
+
+      if (noticeFile) {
+        const maxBytes = 12 * 1024 * 1024; // 12MB guard
+        if (noticeFile.size > maxBytes) {
+          setMsg("PDF is too large. Please upload a file under 12MB.");
+          return;
+        }
+        if (noticeFile.type !== "application/pdf") {
+          setMsg("Please upload a PDF file.");
+          return;
+        }
+
+        const ts = new Date().toISOString().replace(/[:.]/g, "-");
+        const safeName = (noticeFile.name || "notice.pdf").replace(/[^\w.\-]+/g, "_");
+        noticeFilePath = `${userId}/${ts}_${safeName}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("regulator_notices")
+          .upload(noticeFilePath, noticeFile, { upsert: true, contentType: "application/pdf" });
+
+        if (upErr) throw upErr;
+      }
+
+      // 2) Insert notice row
       const payload = {
         user_id: userId,
         regulator_name: safeText(regulatorName) || "Regulator",
@@ -209,17 +236,20 @@ export default function NoticesPage() {
         notice_date: noticeDate ? noticeDate : null,
         response_deadline: deadline ? deadline : null,
         notice_text: safeText(noticeText) || null,
+        notice_file_path: noticeFilePath, // ✅ store path
         status: "RECEIVED",
       };
 
       const { error } = await supabase.from("regulator_notices").insert([payload]);
       if (error) throw error;
 
+      // reset form
       setRegulatorName("FMU / Relevant Authority");
       setReferenceNo("");
       setNoticeDate("");
       setDeadline("");
       setNoticeText("");
+      setNoticeFile(null);
 
       await refresh();
       setMsg("Notice saved. A consultant can now review and draft a response.");
@@ -300,6 +330,26 @@ export default function NoticesPage() {
             <Input label="Reference no. (optional)" value={referenceNo} onChange={setReferenceNo} placeholder="e.g., XYZ/2026/..." />
             <Input label="Notice date (optional)" value={noticeDate} onChange={setNoticeDate} type="date" />
             <Input label="Response deadline (optional)" value={deadline} onChange={setDeadline} type="date" />
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>Notice PDF (optional)</div>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setNoticeFile(e.target.files?.[0] || null)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "#e5e7eb",
+                  outline: "none",
+                }}
+              />
+              <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
+                Uploading stores the PDF privately for consultant review. This platform does not send it to any regulator.
+              </div>
+            </label>
             <TextArea
               label="Notice summary / key points (optional)"
               value={noticeText}

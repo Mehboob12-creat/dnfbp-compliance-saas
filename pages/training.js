@@ -6,6 +6,7 @@ import { jsPDF } from "jspdf";
 export default function TrainingPage() {
   const [msg, setMsg] = useState("Loading...");
   const [userEmail, setUserEmail] = useState("");
+  const [userId, setUserId] = useState("");
   const [completions, setCompletions] = useState(new Set());
   const [activeKey, setActiveKey] = useState(TRAINING_MODULES[0]?.key || "");
   const [quizAnswers, setQuizAnswers] = useState({});
@@ -26,21 +27,32 @@ export default function TrainingPage() {
   }, [completions]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function guardAndLoad() {
-      const { data } = await supabase.auth.getUser();
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        if (!cancelled) setMsg(error.message);
+        return;
+      }
       if (!data?.user) {
         window.location.href = "/login";
         return;
       }
+
+      if (cancelled) return;
+
       setUserEmail(data.user.email || "");
+      setUserId(data.user.id || "");
 
-      // Load completions
-      const { data: rows, error } = await supabase
+      // Load completions (scoped to current user; RLS-safe)
+      const { data: rows, error: loadErr } = await supabase
         .from("training_completions")
-        .select("module_key");
+        .select("module_key")
+        .eq("user_id", data.user.id);
 
-      if (error) {
-        setMsg(error.message);
+      if (loadErr) {
+        if (!cancelled) setMsg(loadErr.message);
         return;
       }
 
@@ -50,6 +62,10 @@ export default function TrainingPage() {
     }
 
     guardAndLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function resetQuiz() {
@@ -69,16 +85,32 @@ export default function TrainingPage() {
 
   async function markCompleted(module) {
     try {
+      if (!userId) {
+        setMsg("Please log in again to record training completion.");
+        return;
+      }
+
       setMsg("Saving completion...");
-      const { error } = await supabase.from("training_completions").upsert(
-        [
-          {
-            module_key: module.key,
-            completed_at: new Date().toISOString(),
-          },
-        ],
-        { onConflict: "user_id,module_key" }
-      );
+
+      const quizScore = scoreQuiz(module);
+      const total = quizScore.total || 0;
+      const correct = quizScore.correct || 0;
+      const passed = total === 0 ? true : correct >= Math.ceil(total * 0.67);
+
+      const { error } = await supabase
+        .from("training_completions")
+        .upsert(
+          [
+            {
+              user_id: userId,
+              module_key: module.key,
+              completed_at: new Date().toISOString(),
+              passed,
+              score: total ? Math.round((correct / total) * 100) : 100,
+            },
+          ],
+          { onConflict: "user_id,module_key" }
+        );
 
       if (error) throw error;
 
@@ -94,10 +126,18 @@ export default function TrainingPage() {
 
   async function markIncomplete(module) {
     try {
+      if (!userId) {
+        setMsg("Please log in again to update training completion.");
+        return;
+      }
+
       setMsg("Updating...");
+
+      // Scoped delete (RLS-safe)
       const { error } = await supabase
         .from("training_completions")
         .delete()
+        .eq("user_id", userId)
         .eq("module_key", module.key);
 
       if (error) throw error;
@@ -155,7 +195,8 @@ export default function TrainingPage() {
 
   const completed = completions.has(active.key);
   const quizScore = scoreQuiz(active);
-  const quizPassed = quizScore.total === 0 ? true : quizScore.correct >= Math.ceil(quizScore.total * 0.67); // 67% pass
+  const quizPassed =
+    quizScore.total === 0 ? true : quizScore.correct >= Math.ceil(quizScore.total * 0.67); // 67% pass
 
   return (
     <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
@@ -169,8 +210,8 @@ export default function TrainingPage() {
               Training Modules
             </h1>
             <p style={{ marginTop: 8, color: "#64748b", lineHeight: 1.6, maxWidth: 900 }}>
-              Role-based modules for AML/CFT awareness, recordkeeping, and inspection preparation.
-              Completion is tracked for internal evidence. Regulatory reporting decisions remain subject to human review and approval.
+              Role-based modules for AML/CFT awareness, recordkeeping, and inspection preparation. Completion is tracked
+              for internal evidence. Regulatory reporting decisions remain subject to human review and approval.
             </p>
           </div>
 
@@ -370,7 +411,8 @@ export default function TrainingPage() {
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
                 <Pill tone={quizPassed ? "good" : "warn"}>
-                  Quiz score: {quizScore.correct}/{quizScore.total || 0} {quizScore.total ? (quizPassed ? "• Pass" : "• Not yet") : ""}
+                  Quiz score: {quizScore.correct}/{quizScore.total || 0}{" "}
+                  {quizScore.total ? (quizPassed ? "• Pass" : "• Not yet") : ""}
                 </Pill>
 
                 <button onClick={resetQuiz} style={ghostBtn}>

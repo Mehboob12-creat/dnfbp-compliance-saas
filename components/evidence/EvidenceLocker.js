@@ -5,6 +5,7 @@ import {
   listEvidenceFor,
   getEvidenceDownloadUrl,
   deleteEvidence,
+  logEvidenceDownloaded,
 } from "../../utils/evidence/evidenceRepo";
 
 const styles = {
@@ -129,6 +130,13 @@ export default function EvidenceLocker({ object_type, object_id, title = "Eviden
     try {
       const url = await getEvidenceDownloadUrl({ bucket: item.bucket, object_path: item.object_path });
       window.open(url, "_blank", "noopener,noreferrer");
+
+      await logEvidenceDownloaded({
+        object_type,
+        object_id,
+        evidenceId: item.id,
+        filename: item.filename,
+      });
     } catch (e) {
       console.error(e);
       setErrorMsg(e?.message || "Download failed.");

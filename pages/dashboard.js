@@ -49,6 +49,31 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {/* Policy Generator Quick Action Card */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <Link href="/policy" style={{ textDecoration: "none" }}>
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 18,
+                  padding: 16,
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+                  cursor: "pointer",
+                }}
+                title="Draft, review, and export an AML/CFT policy (human-reviewed)."
+              >
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Quick Action</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#e5e7eb" }}>Policy Generator</div>
+                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.8, lineHeight: 1.45 }}>
+                  Create a draft, review internally, and export as PDF for inspection preparation.
+                </div>
+              </div>
+            </Link>
+          </div>
+        </div>
+
         <div
           style={{
             display: "grid",

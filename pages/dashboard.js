@@ -200,6 +200,9 @@ export default function Dashboard() {
                     <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", textDecoration: "none" }}>
                       + New entity
                     </Link>
+                    <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                      Audit Log
+                    </Link>
                   </div>
 
                   {entityStats.dueReview.length > 0 ? (

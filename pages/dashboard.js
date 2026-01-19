@@ -5,13 +5,101 @@ import { computeInspectionReadiness } from "../utils/inspection/readiness";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
+  const [entityStats, setEntityStats] = useState({
+    total: 0,
+    draft: 0,
+    uboNotMet: 0,
+    dueReview: [],
+  });
+  const [entitiesLoading, setEntitiesLoading] = useState(true);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) window.location.href = "/login";
       setUser(data.user);
     });
+    
+    loadEntityDashboard();
   }, []);
+
+  async function loadEntityDashboard() {
+    setEntitiesLoading(true);
+
+    try {
+      // 1) Get UBO threshold (default 25)
+      const { data: settingsData, error: settingsErr } = await supabase
+        .from("org_settings")
+        .select("ubo_threshold")
+        .single();
+
+      // If org_settings row doesn't exist yet, fallback safely
+      const uboThreshold = settingsData?.ubo_threshold ?? 25;
+
+      // 2) Fetch entities
+      const { data: entities, error: entErr } = await supabase
+        .from("legal_persons")
+        .select("id, name, status, created_at")
+        .order("created_at", { ascending: false });
+
+      if (entErr) throw entErr;
+
+      // 3) Fetch UBO associates (we only need entity_id + ownership)
+      const entityIds = (entities || []).map(e => e.id);
+      let uboRows = [];
+
+      if (entityIds.length > 0) {
+        const { data: uboData, error: uboErr } = await supabase
+          .from("legal_person_associates")
+          .select("legal_person_id, role, ownership_percent")
+          .in("legal_person_id", entityIds)
+          .eq("role", "ubo");
+
+        if (uboErr) throw uboErr;
+        uboRows = uboData || [];
+      }
+
+      // 4) Compute stats
+      const total = (entities || []).length;
+      const draft = (entities || []).filter(e => e.status === "draft").length;
+
+      // For each entity: does any UBO meet threshold?
+      const uboMetMap = {};
+      for (const r of uboRows) {
+        const meets = Number(r.ownership_percent || 0) >= Number(uboThreshold || 25);
+        if (!uboMetMap[r.legal_person_id]) uboMetMap[r.legal_person_id] = false;
+        if (meets) uboMetMap[r.legal_person_id] = true;
+      }
+
+      const uboNotMetEntities = (entities || []).filter(e => !uboMetMap[e.id]);
+      const uboNotMet = uboNotMetEntities.length;
+
+      // Keep a small "needs attention" list (top 5)
+      const dueReview = []
+        .concat(
+          (entities || []).filter(e => e.status === "draft").map(e => ({
+            id: e.id,
+            name: e.name,
+            reason: "Draft entity (review recommended).",
+          }))
+        )
+        .concat(
+          uboNotMetEntities.map(e => ({
+            id: e.id,
+            name: e.name,
+            reason: `No UBO recorded at/above threshold (≥ ${uboThreshold}%).`,
+          }))
+        )
+        .slice(0, 5);
+
+      setEntityStats({ total, draft, uboNotMet, dueReview });
+    } catch (err) {
+      console.error("Entity dashboard load error:", err);
+      // Fail quietly (inspection-safe). Keep dashboard usable.
+      setEntityStats({ total: 0, draft: 0, uboNotMet: 0, dueReview: [] });
+    } finally {
+      setEntitiesLoading(false);
+    }
+  }
 
   async function logout() {
     await supabase.auth.signOut();
@@ -78,6 +166,74 @@ export default function Dashboard() {
         {/* Two-column layout for main widgets */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14, marginBottom: 24 }}>
           <InspectionReadinessWidget />
+          
+          {/* Legal Persons Widget */}
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", overflow: "hidden" }}>
+            <div style={{ padding: 14, background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#334155" }}>
+              <div style={{ fontWeight: 700 }}>Legal Persons</div>
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                Entity onboarding, UBOs/controllers, and inspection-ready exports.
+              </div>
+            </div>
+
+            <div style={{ padding: 16 }}>
+              {entitiesLoading ? (
+                <div style={{ color: "#64748b" }}>Loading…</div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                      Total: <b>{entityStats.total}</b>
+                    </span>
+                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                      Draft: <b>{entityStats.draft}</b>
+                    </span>
+                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                      UBO threshold not met: <b>{entityStats.uboNotMet}</b>
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                      View entities
+                    </Link>
+                    <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", textDecoration: "none" }}>
+                      + New entity
+                    </Link>
+                  </div>
+
+                  {entityStats.dueReview.length > 0 ? (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Needs attention</div>
+                      <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
+                        {entityStats.dueReview.map((x, idx) => (
+                          <Link
+                            key={x.id + idx}
+                            href={`/entities/${x.id}`}
+                            style={{
+                              display: "block",
+                              padding: 12,
+                              borderBottom: idx === entityStats.dueReview.length - 1 ? "none" : "1px solid #e2e8f0",
+                              textDecoration: "none",
+                              color: "#0f172a",
+                            }}
+                          >
+                            <div style={{ fontWeight: 600 }}>{x.name}</div>
+                            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{x.reason}</div>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 14, fontSize: 12, color: "#64748b" }}>
+                      No items require attention at the moment.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          
           <NoticesDueSoonWidget />
         </div>
         
@@ -88,6 +244,7 @@ export default function Dashboard() {
   );
 }
 
+// Rest of the code remains unchanged...
 function Card({ title, desc }) {
   return (
     <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>

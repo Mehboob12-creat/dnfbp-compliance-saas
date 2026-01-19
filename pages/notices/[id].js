@@ -3,11 +3,19 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { supabase } from "../../utils/supabase";
 
-function Container({ children }) {
+const NOTICE_BUCKET = "regulator_notices";
+const RESPONSE_BUCKET = "regulator_responses";
+
+function safeText(x) {
+  return typeof x === "string" ? x.trim() : "";
+}
+
+function toFileSafeName(input) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0b1220", color: "#e5e7eb" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px 64px" }}>{children}</div>
-    </div>
+    safeText(String(input || ""))
+      .replace(/[^\w.\-]+/g, "_")
+      .replace(/_+/g, "_")
+      .slice(0, 120) || "file"
   );
 }
 
@@ -48,14 +56,13 @@ function Badge({ children }) {
   );
 }
 
-function Button({ children, onClick, disabled, title, tone = "default" }) {
+function Button({ children, onClick, disabled, title, tone = "soft" }) {
   const bg =
     tone === "primary"
       ? "rgba(199,210,254,0.18)"
       : tone === "danger"
-      ? "rgba(248,113,113,0.14)"
+      ? "rgba(253,230,138,0.12)"
       : "rgba(255,255,255,0.08)";
-
   return (
     <button
       onClick={onClick}
@@ -69,7 +76,7 @@ function Button({ children, onClick, disabled, title, tone = "default" }) {
         border: "1px solid rgba(255,255,255,0.12)",
         background: bg,
         color: "#e5e7eb",
-        fontWeight: 700,
+        fontWeight: 800,
       }}
     >
       {children}
@@ -77,112 +84,65 @@ function Button({ children, onClick, disabled, title, tone = "default" }) {
   );
 }
 
-function TextArea({ label, value, onChange, placeholder, rows = 10 }) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div>
-      <textarea
-        value={value}
-        rows={rows}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "12px 12px",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.04)",
-          color: "#e5e7eb",
-          outline: "none",
-          lineHeight: 1.6,
-          resize: "vertical",
-        }}
-      />
-    </label>
-  );
-}
-
-function Input({ label, value, onChange, placeholder, type = "text" }) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div>
-      <input
-        value={value}
-        type={type}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "12px 12px",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.04)",
-          color: "#e5e7eb",
-          outline: "none",
-        }}
-      />
-    </label>
-  );
-}
-
-function safeText(x) {
-  return typeof x === "string" ? x.trim() : "";
-}
-
-function noticeStatusLabel(s) {
-  const v = safeText(s).toUpperCase();
-  if (v === "RECEIVED") return "Received";
-  if (v === "UNDER_REVIEW") return "Under review";
-  if (v === "RESPONSE_DRAFTED") return "Response drafted";
-  if (v === "DELIVERED") return "Delivered to client";
-  return "Received";
-}
-
 export default function NoticeDetailPage() {
   const router = useRouter();
-  const { id } = router.query;
+  const noticeId = safeText(router.query?.id);
 
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  const [userId, setUserId] = useState("");
+  const [notice, setNotice] = useState(null);
   const [noticePdfUrl, setNoticePdfUrl] = useState("");
 
-  const [notice, setNotice] = useState(null);
-  const [responseRow, setResponseRow] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const [selectedResponseUrl, setSelectedResponseUrl] = useState("");
 
-  // editable response fields
-  const [responseText, setResponseText] = useState("");
-  const [consultantNotes, setConsultantNotes] = useState("");
-  const [feeAmount, setFeeAmount] = useState("");
-  const [timelineDays, setTimelineDays] = useState("");
+  // Consultant upload state
+  const [responseFile, setResponseFile] = useState(null);
+  const [versionNote, setVersionNote] = useState("");
+  const [markFinal, setMarkFinal] = useState(true);
 
-  const hasResponse = useMemo(() => !!responseRow?.id, [responseRow]);
+  const latestResponse = useMemo(() => {
+    if (!responses?.length) return null;
+    return responses[0];
+  }, [responses]);
 
   async function refresh() {
-    if (!id) return;
+    if (!noticeId) return;
+
     setLoading(true);
+    setErr("");
     setMsg("");
+
     try {
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw userErr;
       if (!userData?.user) {
-        window.location.href = "/login";
+        router.replace("/login");
         return;
       }
+      setUserId(userData.user.id);
 
       const { data: n, error: nErr } = await supabase
         .from("regulator_notices")
         .select("*")
-        .eq("id", id)
-        .single();
+        .eq("id", noticeId)
+        .maybeSingle();
 
       if (nErr) throw nErr;
+      if (!n) {
+        setErr("Notice not found or not accessible under your account.");
+        setLoading(false);
+        return;
+      }
+      setNotice(n);
 
-      setNotice(n || null);
-
-      // Signed URL for private PDF (short-lived; safe)
-      if (n?.notice_file_path) {
+      // Notice PDF (private signed link)
+      if (n.notice_file_path) {
         const { data: signed, error: sErr } = await supabase.storage
-          .from("regulator_notices")
+          .from(NOTICE_BUCKET)
           .createSignedUrl(n.notice_file_path, 60 * 30); // 30 minutes
 
         if (!sErr) setNoticePdfUrl(signed?.signedUrl || "");
@@ -191,27 +151,21 @@ export default function NoticeDetailPage() {
         setNoticePdfUrl("");
       }
 
-      const { data: r, error: rErr } = await supabase
+      // Responses list (latest first)
+      const { data: rRows, error: rErr } = await supabase
         .from("regulator_responses")
-        .select("*")
-        .eq("notice_id", id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .select("id, notice_id, version, is_final, version_note, response_file_path, response_file_url, created_at, updated_at")
+        .eq("notice_id", noticeId)
+        .order("version", { ascending: false });
 
       if (rErr) throw rErr;
 
-      setResponseRow(r || null);
+      setResponses(rRows || []);
+      setSelectedResponseUrl("");
 
-      setResponseText(r?.response_text || defaultResponseTemplate(n));
-      setConsultantNotes(r?.consultant_notes || "");
-      setFeeAmount(r?.fee_amount != null ? String(r.fee_amount) : "");
-      setTimelineDays(r?.timeline_days != null ? String(r.timeline_days) : "");
-
-      setMsg("");
+      setLoading(false);
     } catch (e) {
-      setMsg(e?.message || "Failed to load notice.");
-    } finally {
+      setErr(e?.message || "Unable to load notice details.");
       setLoading(false);
     }
   }
@@ -219,352 +173,408 @@ export default function NoticeDetailPage() {
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [noticeId]);
 
-  function defaultResponseTemplate(n) {
-    const regulator = safeText(n?.regulator_name) || "the relevant authority";
-    const ref = safeText(n?.reference_no);
-    const refLine = ref ? `Reference: ${ref}` : "Reference: —";
-
-    return [
-      "Subject: Response to Notice (Human-Reviewed Draft)",
-      "",
-      `To: ${regulator}`,
-      refLine,
-      "",
-      "We acknowledge receipt of the referenced notice.",
-      "",
-      "Summary of response (inspection-safe):",
-      "- We are reviewing the notice and compiling the requested information from internal records.",
-      "- Where applicable, supporting evidence will be organized and provided in a structured format.",
-      "",
-      "Information provided / actions taken:",
-      "1) [Add itemized response points here]",
-      "2) [Attach documents / references as applicable]",
-      "",
-      "Notes:",
-      "- This response is prepared for client submission. Submission remains the responsibility of the client / authorized representative.",
-      "- Final decisions remain subject to management approval.",
-      "",
-      "Sincerely,",
-      "[Name / Title]",
-      "[Organization]",
-      "",
-    ].join("\n");
-  }
-
-  async function setNoticeStatus(status) {
-    if (!notice?.id) return;
-    setMsg("Updating status…");
-    try {
-      const { error } = await supabase.from("regulator_notices").update({ status }).eq("id", notice.id);
-      if (error) throw error;
-      await refresh();
-      setMsg("Saved.");
-      setTimeout(() => setMsg(""), 800);
-    } catch (e) {
-      setMsg(e?.message || "Failed to update status.");
-    }
-  }
-
-  async function saveDraft() {
-    if (!notice?.id) return;
-
-    setMsg("Saving draft…");
-    try {
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr) throw userErr;
-      const draftedBy = userData?.user?.id || null;
-
-      const payload = {
-        notice_id: notice.id,
-        drafted_by: draftedBy,
-        response_text: responseText || "",
-        consultant_notes: consultantNotes || null,
-        fee_amount: feeAmount ? Number(feeAmount) : null,
-        timeline_days: timelineDays ? Number(timelineDays) : null,
-        status: "DRAFT",
-      };
-
-      const { data: up, error } = await supabase
-        .from("regulator_responses")
-        .upsert([payload], { onConflict: "notice_id" })
-        .select("*")
-        .single();
+  async function createSignedResponseUrl(row) {
+    // Prefer storage path (recommended)
+    if (row?.response_file_path) {
+      const { data, error } = await supabase.storage
+        .from(RESPONSE_BUCKET)
+        .createSignedUrl(row.response_file_path, 60 * 30);
 
       if (error) throw error;
-
-      // reflect notice workflow status
-      await supabase.from("regulator_notices").update({ status: "RESPONSE_DRAFTED" }).eq("id", notice.id);
-
-      setResponseRow(up);
-      setMsg("Draft saved.");
-      setTimeout(() => setMsg(""), 900);
-      await refresh();
-    } catch (e) {
-      setMsg(e?.message || "Failed to save draft.");
+      return data?.signedUrl || "";
     }
+
+    // Legacy URL fallback
+    if (row?.response_file_url) return row.response_file_url;
+    return "";
   }
 
-  async function finalizeForClient() {
-    if (!notice?.id) return;
-
-    const ok = window.confirm(
-      "Mark as delivered to client?\n\nThis only updates internal workflow status. It does not contact any regulator."
-    );
-    if (!ok) return;
-
-    setMsg("Marking delivered…");
+  async function uploadConsultantResponse() {
     try {
-      if (responseRow?.id) {
-        const { error } = await supabase
-          .from("regulator_responses")
-          .update({ status: "FINALIZED", response_text: responseText || "" })
-          .eq("id", responseRow.id);
-        if (error) throw error;
+      setMsg("");
+      setErr("");
+
+      if (!userId) {
+        setErr("Please log in again.");
+        return;
+      }
+
+      if (!responseFile) {
+        setErr("Please choose a response PDF to upload.");
+        return;
+      }
+
+      if (responseFile.type !== "application/pdf") {
+        setErr("Please upload a PDF file.");
+        return;
+      }
+
+      const maxBytes = 12 * 1024 * 1024; // 12MB
+      if (responseFile.size > maxBytes) {
+        setErr("PDF is too large. Please upload a file under 12MB.");
+        return;
+      }
+
+      // Next version number (simple + reliable)
+      const nextVersion = (responses?.[0]?.version || 0) + 1;
+
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const safeName = toFileSafeName(responseFile.name || `response_v${nextVersion}.pdf`);
+
+      // Storage path: {auth.uid()}/{noticeId}/v{n}_{timestamp}_{filename}.pdf
+      const path = `${userId}/${noticeId}/v${nextVersion}_${ts}_${safeName}`;
+
+      setMsg("Uploading response PDF…");
+
+      const { error: upErr } = await supabase.storage
+        .from(RESPONSE_BUCKET)
+        .upload(path, responseFile, {
+          upsert: false,
+          contentType: "application/pdf",
+        });
+
+      if (upErr) throw upErr;
+
+      setMsg("Saving response record…");
+
+      const { error: insErr } = await supabase.from("regulator_responses").insert([
+        {
+          notice_id: noticeId,
+          drafted_by: userId,
+          version: nextVersion,
+          is_final: !!markFinal,
+          version_note: safeText(versionNote) || null,
+          response_file_path: path,
+          status: markFinal ? "FINALIZED" : "DRAFT",
+        },
+      ]);
+
+      if (insErr) throw insErr;
+
+      // If final, update notice status to DELIVERED (inspection-safe “delivered to client”)
+      if (markFinal) {
+        await supabase
+          .from("regulator_notices")
+          .update({ status: "DELIVERED" })
+          .eq("id", noticeId);
       } else {
-        // ensure at least one save exists
-        await saveDraft();
+        await supabase
+          .from("regulator_notices")
+          .update({ status: "RESPONSE_DRAFTED" })
+          .eq("id", noticeId);
       }
 
-      await setNoticeStatus("DELIVERED");
-      setMsg("Delivered status recorded.");
-      setTimeout(() => setMsg(""), 900);
+      setResponseFile(null);
+      setVersionNote("");
+      setMarkFinal(true);
+
+      setMsg(markFinal ? "Final response uploaded and marked as ready for client submission." : "Draft response uploaded.");
+      await refresh();
+      setTimeout(() => setMsg(""), 1400);
     } catch (e) {
-      setMsg(e?.message || "Failed to finalize.");
-    }
-  }
-
-  async function exportPdf() {
-    try {
-      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-      if (sessionErr) throw sessionErr;
-      const token = sessionData?.session?.access_token;
-      if (!token) {
-        alert("Session expired. Please log in again.");
-        return;
-      }
-
-      const resp = await fetch("/api/notice-response-export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ noticeId: id }),
-      });
-
-      if (!resp.ok) {
-        const j = await resp.json().catch(() => null);
-        alert(j?.detail || j?.error || "Export failed.");
-        return;
-      }
-
-      const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Notice_Response_${id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(e?.message || "Export failed.");
+      setErr(e?.message || "Failed to upload response.");
     }
   }
 
   return (
-    <Container>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>
-            <Link href="/dashboard" style={{ color: "#c7d2fe", textDecoration: "none" }}>
-              Dashboard
-            </Link>{" "}
-            <span style={{ opacity: 0.5 }}>/</span>{" "}
-            <Link href="/notices" style={{ color: "#c7d2fe", textDecoration: "none" }}>
-              Notices
-            </Link>{" "}
-            <span style={{ opacity: 0.5 }}>/</span> <span>Notice</span>
+    <div style={{ minHeight: "100vh", background: "#0b1220", color: "#e5e7eb" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px 64px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 6 }}>
+              <Link href="/dashboard" style={{ color: "#c7d2fe", textDecoration: "none" }}>
+                Dashboard
+              </Link>{" "}
+              <span style={{ opacity: 0.5 }}>/</span>{" "}
+              <Link href="/notices" style={{ color: "#c7d2fe", textDecoration: "none" }}>
+                Regulator Notices
+              </Link>{" "}
+              <span style={{ opacity: 0.5 }}>/</span> <span>Notice</span>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 850, letterSpacing: -0.4 }}>Regulator Notice</div>
+            <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.45, maxWidth: 860 }}>
+              Upload and review notices, draft responses, and deliver response PDFs for client submission. This platform does not
+              submit anything to regulators automatically.
+            </div>
           </div>
 
-          <div style={{ fontSize: 26, fontWeight: 780, letterSpacing: -0.4 }}>Notice Review & Response Draft</div>
-          <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.45, maxWidth: 900 }}>
-            Draft responses in a consultant-controlled workflow. This platform does not submit responses to regulators.
-            Submission remains the responsibility of the client / authorized representative.
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Link href="/notices" style={{ textDecoration: "none" }}>
+              <Button tone="soft" title="Back to notices">
+                Back
+              </Button>
+            </Link>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Button onClick={refresh} disabled={loading} title="Refresh">
-            Refresh
-          </Button>
-          <Button onClick={exportPdf} disabled={loading || !id} title="Export current saved response as PDF">
-            Export Response PDF
-          </Button>
-        </div>
-      </div>
-
-      {msg ? (
-        <div style={{ marginTop: 12 }}>
-          <Card>
-            <div style={{ opacity: 0.9 }}>{msg}</div>
-          </Card>
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div style={{ marginTop: 14 }}>
-          <Card>Loading…</Card>
-        </div>
-      ) : !notice ? (
-        <div style={{ marginTop: 14 }}>
-          <Card>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>Notice not available</div>
-            <div style={{ opacity: 0.85 }}>This record may not exist or is not accessible under current permissions.</div>
-          </Card>
-        </div>
-      ) : (
-        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "420px 1fr", gap: 14 }}>
-          {/* Notice details */}
-          <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 850, fontSize: 16 }}>Notice details</div>
-              <Badge>{noticeStatusLabel(notice.status)}</Badge>
-            </div>
-
-            <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 13, opacity: 0.9, lineHeight: 1.55 }}>
-              <div>
-                <span style={{ opacity: 0.75 }}>Authority:</span> <span style={{ fontWeight: 750 }}>{notice.regulator_name}</span>
-              </div>
-              <div>
-                <span style={{ opacity: 0.75 }}>Reference:</span> {notice.reference_no || "—"}
-              </div>
-              <div>
-                <span style={{ opacity: 0.75 }}>Notice date:</span>{" "}
-                {notice.notice_date ? new Date(notice.notice_date).toLocaleDateString() : "—"}
-              </div>
-              <div>
-                <span style={{ opacity: 0.75 }}>Deadline:</span>{" "}
-                {notice.response_deadline ? new Date(notice.response_deadline).toLocaleDateString() : "—"}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 12 }}>
-              <TextArea
-                label="Notice summary / key points (read-only here)"
-                value={notice.notice_text || ""}
-                onChange={() => {}}
-                rows={10}
-                placeholder="—"
-              />
-            </div>
-
-            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Button onClick={() => setNoticeStatus("UNDER_REVIEW")} title="Marks this notice as under review (internal workflow).">
-                Mark Under Review
-              </Button>
-              <Button onClick={() => setNoticeStatus("RECEIVED")} title="Marks this notice as received (internal workflow).">
-                Mark Received
-              </Button>
-            </div>
-
-            {noticePdfUrl ? (
-              <a href={noticePdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                <button
-                  style={{
-                    borderRadius: 14,
-                    padding: "12px 14px",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "#e5e7eb",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                  title="Open the uploaded notice PDF (private link)."
-                >
-                  Open Notice PDF
-                </button>
-              </a>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.78 }}>
-                No PDF uploaded for this notice.
+        {loading ? (
+          <div style={{ marginTop: 18 }}>
+            <Card>Loading…</Card>
+          </div>
+        ) : err ? (
+          <div style={{ marginTop: 18 }}>
+            <Card>
+              <div style={{ fontWeight: 850, marginBottom: 8 }}>Unable to load notice</div>
+              <div style={{ opacity: 0.85, lineHeight: 1.6 }}>{err}</div>
+            </Card>
+          </div>
+        ) : (
+          <>
+            {!!msg && (
+              <div style={{ marginTop: 14 }}>
+                <Card>
+                  <div style={{ opacity: 0.9 }}>{msg}</div>
+                </Card>
               </div>
             )}
 
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78, lineHeight: 1.6 }}>
-              Inspection-safe note: status updates are internal workflow labels and do not imply regulatory outcomes.
-            </div>
-          </Card>
+            {!!err && (
+              <div style={{ marginTop: 14 }}>
+                <Card>
+                  <div style={{ opacity: 0.9 }}>{err}</div>
+                </Card>
+              </div>
+            )}
 
-          {/* Draft response */}
-          <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontWeight: 850, fontSize: 16 }}>Response draft (human-reviewed)</div>
-                <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.55 }}>
-                  Draft in neutral, factual language. Avoid definitive legal conclusions inside the tool. Final review and submission remain
-                  human-controlled.
+            {/* Notice summary */}
+            <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 14 }}>
+              <Card>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Notice</div>
+                    <div style={{ fontSize: 18, fontWeight: 850 }}>
+                      {notice?.regulator_name || "Regulator"}
+                      {notice?.reference_no ? <span style={{ opacity: 0.75 }}> • {notice.reference_no}</span> : null}
+                    </div>
+                    <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.5 }}>
+                      Deadline:{" "}
+                      <b>{notice?.response_deadline ? new Date(notice.response_deadline).toLocaleDateString() : "—"}</b>
+                      {" · "}
+                      Status: <b>{safeText(notice?.status || "RECEIVED")}</b>
+                    </div>
+
+                    {notice?.notice_text ? (
+                      <div style={{ marginTop: 12, opacity: 0.85, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                        {notice.notice_text}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 12, opacity: 0.75 }}>No notice text provided.</div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Badge>ID: {noticeId}</Badge>
+                    {noticePdfUrl ? (
+                      <a href={noticePdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                        <Button title="Open the uploaded notice PDF (private link).">Open Notice PDF</Button>
+                      </a>
+                    ) : (
+                      <Badge>No PDF uploaded</Badge>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <Badge>{hasResponse ? "Saved draft exists" : "Not saved yet"}</Badge>
-                <Badge>{responseRow?.status === "FINALIZED" ? "Finalized" : "Draft"}</Badge>
-              </div>
+              </Card>
+
+              {/* Response status */}
+              <Card>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Response status</div>
+                <div style={{ fontSize: 16, fontWeight: 850 }}>
+                  {latestResponse?.is_final ? "Final response available" : latestResponse ? "Draft response available" : "No response uploaded"}
+                </div>
+                <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.6 }}>
+                  Responses are provided for client submission. This platform does not send responses to regulators automatically.
+                </div>
+                {latestResponse ? (
+                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const url = await createSignedResponseUrl(latestResponse);
+                          if (!url) throw new Error("Response file is not available.");
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        } catch (e) {
+                          setErr(e?.message || "Unable to open response PDF.");
+                        }
+                      }}
+                      title="Open the latest response PDF (private link)."
+                      tone="primary"
+                    >
+                      Open Latest Response PDF
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
             </div>
 
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              <TextArea
-                label="Response text"
-                value={responseText}
-                onChange={setResponseText}
-                rows={16}
-                placeholder="Draft response text…"
-              />
+            {/* Consultant upload */}
+            <div style={{ marginTop: 14 }}>
+              <Card>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>Consultant response upload</div>
+                    <div style={{ marginTop: 6, opacity: 0.82, lineHeight: 1.6, maxWidth: 900 }}>
+                      Upload a drafted response PDF for client submission. Keep language inspection-safe and neutral. Final decisions remain human-reviewed.
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <Badge>Bucket: {RESPONSE_BUCKET}</Badge>
+                  </div>
+                </div>
 
-              <TextArea
-                label="Consultant notes (optional, internal)"
-                value={consultantNotes}
-                onChange={setConsultantNotes}
-                rows={4}
-                placeholder="Optional notes for internal workflow (not required)."
-              />
+                <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Response PDF (required)</div>
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => setResponseFile(e.target.files?.[0] || null)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.04)",
+                        color: "#e5e7eb",
+                        outline: "none",
+                      }}
+                    />
+                    <div style={{ fontSize: 12, opacity: 0.75, lineHeight: 1.5 }}>
+                      Stored privately for audit-ready recordkeeping. No regulator integration.
+                    </div>
+                  </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Input
-                  label="Fee (optional)"
-                  value={feeAmount}
-                  onChange={setFeeAmount}
-                  placeholder="e.g., 25000"
-                  type="number"
-                />
-                <Input
-                  label="Timeline days (optional)"
-                  value={timelineDays}
-                  onChange={setTimelineDays}
-                  placeholder="e.g., 3"
-                  type="number"
-                />
-              </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Version note (optional)</div>
+                    <input
+                      value={versionNote}
+                      onChange={(e) => setVersionNote(e.target.value)}
+                      placeholder="e.g., Updated dates and clarified scope"
+                      style={{
+                        width: "100%",
+                        padding: "12px 12px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.04)",
+                        color: "#e5e7eb",
+                        outline: "none",
+                      }}
+                    />
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <Button onClick={saveDraft} tone="primary" title="Saves the response draft and marks notice as Response Drafted.">
-                  Save Draft
-                </Button>
-                <Button
-                  onClick={finalizeForClient}
-                  title="Marks as delivered to client for submission. Does not contact regulators."
-                >
-                  Mark Delivered to Client
-                </Button>
-              </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, opacity: 0.9 }}>
+                      <input
+                        type="checkbox"
+                        checked={markFinal}
+                        onChange={(e) => setMarkFinal(e.target.checked)}
+                      />
+                      Mark as final (ready for client submission)
+                    </label>
+                  </div>
+                </div>
 
-              <div style={{ marginTop: 2, fontSize: 12, opacity: 0.78, lineHeight: 1.6 }}>
-                Inspection-safe note: exporting a response is for internal review and client submission preparation. This platform does not
-                submit responses to regulators.
-              </div>
+                <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Button
+                    onClick={uploadConsultantResponse}
+                    disabled={!responseFile}
+                    tone="primary"
+                    title="Uploads a response PDF and records a new version."
+                  >
+                    Upload Response PDF
+                  </Button>
+                </div>
+              </Card>
             </div>
-          </Card>
-        </div>
-      )}
-    </Container>
+
+            {/* Response history */}
+            <div style={{ marginTop: 14 }}>
+              <Card>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>Response history</div>
+                    <div style={{ marginTop: 6, opacity: 0.82, lineHeight: 1.6 }}>
+                      Versioned uploads support inspection preparation and internal tracking. Clients should submit responses themselves.
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <Badge>{responses?.length || 0} versions</Badge>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                  {responses?.length ? (
+                    responses.map((r) => (
+                      <div
+                        key={r.id}
+                        style={{
+                          borderRadius: 16,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.03)",
+                          padding: 14,
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 900 }}>
+                            Version v{r.version} {r.is_final ? <span style={{ opacity: 0.75 }}>• Final</span> : <span style={{ opacity: 0.75 }}>• Draft</span>}
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <Badge>{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</Badge>
+                            <Button
+                              onClick={async () => {
+                                try {
+                                  const url = await createSignedResponseUrl(r);
+                                  if (!url) throw new Error("Response file is not available.");
+                                  setSelectedResponseUrl(url);
+                                  window.open(url, "_blank", "noopener,noreferrer");
+                                } catch (e) {
+                                  setErr(e?.message || "Unable to open response PDF.");
+                                }
+                              }}
+                              title="Open this version (private link)."
+                            >
+                              Open PDF
+                            </Button>
+                          </div>
+                        </div>
+
+                        {r.version_note ? (
+                          <div style={{ opacity: 0.85, lineHeight: 1.55 }}>
+                            Note: {r.version_note}
+                          </div>
+                        ) : (
+                          <div style={{ opacity: 0.75 }}>No version note provided.</div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ opacity: 0.85 }}>No response versions uploaded yet.</div>
+                  )}
+                </div>
+
+                {selectedResponseUrl ? (
+                  <div style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
+                    Latest opened response link is time-limited for privacy.
+                  </div>
+                ) : null}
+              </Card>
+            </div>
+
+            {/* Inspection-safe footer note */}
+            <div style={{ marginTop: 14 }}>
+              <Card>
+                <div style={{ fontSize: 16, fontWeight: 900 }}>Inspection-safe notes</div>
+                <ul style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.7, paddingLeft: 18 }}>
+                  <li>This module supports drafting and organizing records for inspection preparation and internal recordkeeping.</li>
+                  <li>Responses are delivered for client submission. The platform does not communicate with regulators automatically.</li>
+                  <li>All reporting and escalation decisions remain subject to human review and approval.</li>
+                </ul>
+              </Card>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

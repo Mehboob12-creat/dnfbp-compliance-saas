@@ -144,6 +144,7 @@ export default function NoticeDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [noticePdfUrl, setNoticePdfUrl] = useState("");
 
   const [notice, setNotice] = useState(null);
   const [responseRow, setResponseRow] = useState(null);
@@ -176,6 +177,20 @@ export default function NoticeDetailPage() {
 
       if (nErr) throw nErr;
 
+      setNotice(n || null);
+
+      // Signed URL for private PDF (short-lived; safe)
+      if (n?.notice_file_path) {
+        const { data: signed, error: sErr } = await supabase.storage
+          .from("regulator_notices")
+          .createSignedUrl(n.notice_file_path, 60 * 30); // 30 minutes
+
+        if (!sErr) setNoticePdfUrl(signed?.signedUrl || "");
+        else setNoticePdfUrl("");
+      } else {
+        setNoticePdfUrl("");
+      }
+
       const { data: r, error: rErr } = await supabase
         .from("regulator_responses")
         .select("*")
@@ -186,7 +201,6 @@ export default function NoticeDetailPage() {
 
       if (rErr) throw rErr;
 
-      setNotice(n || null);
       setResponseRow(r || null);
 
       setResponseText(r?.response_text || defaultResponseTemplate(n));
@@ -452,6 +466,29 @@ export default function NoticeDetailPage() {
                 Mark Received
               </Button>
             </div>
+
+            {noticePdfUrl ? (
+              <a href={noticePdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <button
+                  style={{
+                    borderRadius: 14,
+                    padding: "12px 14px",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#e5e7eb",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  title="Open the uploaded notice PDF (private link)."
+                >
+                  Open Notice PDF
+                </button>
+              </a>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.78 }}>
+                No PDF uploaded for this notice.
+              </div>
+            )}
 
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78, lineHeight: 1.6 }}>
               Inspection-safe note: status updates are internal workflow labels and do not imply regulatory outcomes.

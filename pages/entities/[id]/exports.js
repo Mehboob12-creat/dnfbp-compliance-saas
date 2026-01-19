@@ -10,6 +10,38 @@ import {
   getOrCreateMiniKyc,
 } from "../../../utils/entities/legalPersonRepo";
 
+function toCsvValue(v) {
+  const s = (v ?? "").toString();
+  const escaped = s.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
+function downloadCsv({ filename, rows }) {
+  if (!rows || rows.length === 0) {
+    alert("Nothing to export yet.");
+    return;
+  }
+
+  const header = Object.keys(rows[0] || {});
+  const lines = [
+    header.map(toCsvValue).join(","),
+    ...rows.map((r) => header.map((h) => toCsvValue(r[h])).join(",")),
+  ];
+
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+}
+
 const styles = {
   page: { padding: 24, maxWidth: 1100, margin: "0 auto" },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" },
@@ -106,8 +138,6 @@ export default function EntityExportsPage() {
     );
   }
 
-  const csvUrl = `/api/entity-register.csv?entityId=${encodeURIComponent(id)}`;
-
   return (
     <div style={styles.page}>
       <div style={styles.headerRow}>
@@ -147,9 +177,35 @@ export default function EntityExportsPage() {
             <div style={styles.tiny}>Includes roles, ownership %, indirect flag, and Mini-KYC indicators.</div>
           </div>
           <div style={styles.cardBody}>
-            <a href={csvUrl} style={{ ...styles.btnPrimary, display: "inline-block", textDecoration: "none" }}>
+            <button
+              type="button"
+              style={styles.btnPrimary}
+              onClick={() => {
+                const csvRows = associates.map((a) => {
+                  const mk = miniKycByAssoc[a.id] || {};
+                  return {
+                    "Entity Name": entity.name,
+                    "Associate Role": a.role,
+                    "Person Name": mk.full_name || "",
+                    "Ownership %": a.role === "ubo" ? Number(a.ownership_percent || 0) : "",
+                    "Indirect": a.role === "ubo" ? (a.is_indirect ? "Y" : "N") : "",
+                    "PEP": mk.pep_status || "",
+                    "Sanctions screening": mk.sanctions_screening || "",
+                    "ID doc collected": mk.id_doc_collected ? "Y" : "N",
+                    "Address doc collected": mk.address_doc_collected ? "Y" : "N",
+                    "Notes": mk.notes || a.notes || "",
+                  };
+                });
+
+                const safeName = (entity.name || "entity").replace(/[^\w\-]+/g, "_");
+                downloadCsv({
+                  filename: `entity_register_${safeName}.csv`,
+                  rows: csvRows,
+                });
+              }}
+            >
               Download CSV
-            </a>
+            </button>
             <div style={{ marginTop: 10, ...styles.tiny }}>
               Tip: Save to your case file, share with your consultant, or include in an inspection pack.
             </div>

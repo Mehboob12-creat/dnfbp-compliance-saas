@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "../utils/supabase";
 import { computeInspectionReadiness } from "../utils/inspection/readiness";
 
@@ -95,12 +96,12 @@ function Card({ title, desc }) {
 
 function CardLink({ title, desc, href }) {
   return (
-    <a href={href} style={{ textDecoration: "none", color: "inherit" }}>
+    <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>
       <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
         <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
         <div style={{ color: "#64748b", fontSize: 14 }}>{desc}</div>
       </div>
-    </a>
+    </Link>
   );
 }
 
@@ -471,6 +472,27 @@ function InspectionQuickActionsCard() {
         >
           Download Inspection Pack (ZIP)
         </button>
+      </div>
+
+      {/* Add Policy Generator Button */}
+      <div style={{ marginTop: 16 }}>
+        <Link href="/policy" style={{ textDecoration: "none" }}>
+          <button
+            style={{
+              borderRadius: 14,
+              padding: "12px 14px",
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.08)",
+              color: "#e5e7eb",
+              fontWeight: 700,
+              cursor: "pointer",
+              width: "100%",
+            }}
+            title="Draft and review an AML/CFT policy (human-reviewed)."
+          >
+            Policy Generator
+          </button>
+        </Link>
       </div>
     </div>
   );

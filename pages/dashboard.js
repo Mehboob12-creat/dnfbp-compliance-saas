@@ -635,6 +635,24 @@ function InspectionQuickActionsCard() {
         >
           Download Inspection Pack (ZIP)
         </button>
+
+        {/* Add Admin Panel link */}
+        <a
+          href="/admin"
+          style={{
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid #e2e8f0",
+            textDecoration: "none",
+            color: "#0f172a",
+            background: "#fff",
+            display: "inline-block",
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          Admin Panel
+        </a>
       </div>
 
       {/* Add Policy Generator Button */}

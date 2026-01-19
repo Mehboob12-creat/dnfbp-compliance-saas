@@ -141,3 +141,13 @@ export async function deleteEvidence({ evidenceId }) {
 
   return true;
 }
+
+export async function logEvidenceDownloaded({ object_type, object_id, evidenceId, filename }) {
+  await logAuditEvent({
+    action: "evidence.downloaded",
+    summary: `Downloaded evidence file for recordkeeping: ${filename || "file"}.`,
+    object_type,
+    object_id,
+    metadata: { evidence_id: evidenceId },
+  });
+}

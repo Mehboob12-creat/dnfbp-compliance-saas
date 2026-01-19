@@ -39,6 +39,17 @@ function normalizeRiskBandFromRiskRow(riskRow) {
   return "UNKNOWN";
 }
 
+const TRAINING_VALID_DAYS = 365;
+
+function isWithinDays(isoDate, days) {
+  if (!isoDate) return false;
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return d >= cutoff;
+}
+
 function buildInspectionSafeReadme({ customerId, customerName }) {
   const lines = [
     "DNFBP AML/CFT Compliance SaaS — Inspection Pack (Export)",
@@ -215,6 +226,51 @@ export default async function handler(req, res) {
         customer?.screeningResult
     );
 
+    // 4.5) Real training evidence for readiness (logged-in user)
+    // Inspection-safe rule: training is "available" only if a certificate URL exists
+    // and the completion is recent (default 365 days).
+    let trainingEvidence = {
+      completed: false,
+      certificateUrl: null,
+      completedAt: null,
+      moduleId: null,
+      moduleVersion: null,
+    };
+
+    try {
+      const { data: userData, error: userErr } = await authedSupabase.auth.getUser(accessToken);
+      const user = userData?.user || null;
+
+      if (!userErr && user?.id) {
+        const { data: trainingRow, error: trainingErr } = await authedSupabase
+          .from("training_completions")
+          .select("certificate_url, completed_at, created_at, passed, module_id, module_version")
+          .eq("user_id", user.id)
+          .order("completed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!trainingErr && trainingRow) {
+          const completedAt = trainingRow.completed_at || trainingRow.created_at || null;
+          const hasCert = !!trainingRow.certificate_url;
+          const passedOrComplete =
+            trainingRow.passed === true || !!trainingRow.completed_at || !!trainingRow.created_at;
+          const withinValidity = isWithinDays(completedAt, TRAINING_VALID_DAYS);
+
+          trainingEvidence = {
+            completed: !!(hasCert && passedOrComplete && withinValidity),
+            certificateUrl: trainingRow.certificate_url || null,
+            completedAt,
+            moduleId: trainingRow.module_id || null,
+            moduleVersion: trainingRow.module_version || null,
+          };
+        }
+      }
+    } catch (e) {
+      // If anything fails, keep inspection-safe default: not available
+      trainingEvidence.completed = false;
+    }
+
     const readiness = computeInspectionReadiness({
       kycComplete: isKycComplete(customer),
       transactionRecorded: (txCountRes.count || 0) > 0,
@@ -222,9 +278,12 @@ export default async function handler(req, res) {
       riskSaved: Boolean(risk?.id),
       riskBand: normalizeRiskBandFromRiskRow(risk),
 
-      // v1 placeholders (we'll connect properly later)
+      // Existing placeholders (ok to keep until those modules are connected)
       eddEvidenceUploaded: Boolean(customer?.edd_uploaded || customer?.eddEvidenceUploaded),
-      trainingCompleted: Boolean(customer?.training_completed || customer?.trainingCompleted),
+
+      // ✅ Now real
+      trainingCompleted: Boolean(trainingEvidence.completed),
+
       policyExists: Boolean(customer?.policy_exists || customer?.policyExists),
     });
 
@@ -351,44 +410,15 @@ export default async function handler(req, res) {
     // =========================
     let addedTrainingEvidence = false;
     
-    if (supabaseUrl && supabaseAnonKey && accessToken) {
-      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      });
-
-      // Resolve logged-in user from token (inspection-safe; no assumptions)
-      const { data: userData, error: userErr } = await userSupabase.auth.getUser(accessToken);
-      const user = userData?.user || null;
-
-      if (!userErr && user?.id) {
-        const { data: trainingRow, error: trainingErr } = await userSupabase
-          .from("training_completions")
-          .select("certificate_url, completed_at, created_at, passed, module_id, module_version")
-          .eq("user_id", user.id)
-          .order("completed_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (!trainingErr && trainingRow?.certificate_url) {
-          try {
-            // If certificate_url is a full URL, fetch directly.
-            // If it is a storage path, your app should ideally store a signed/public URL.
-            // We treat it as a URL here; fallback stays inspection-safe.
-            const certBuf = await fetchBinary(trainingRow.certificate_url);
-
-            archive.append(certBuf, {
-              name: `${baseFolder}/06_Training_Certificate.pdf`,
-            });
-            addedTrainingEvidence = true;
-          } catch (e) {
-            // If fetch fails, fall back to placeholder (inspection-safe)
-            console.error("Training certificate fetch failed", e);
-          }
-        }
+    if (trainingEvidence?.certificateUrl) {
+      try {
+        const certBuf = await fetchBinary(trainingEvidence.certificateUrl);
+        archive.append(certBuf, {
+          name: `${baseFolder}/06_Training_Certificate.pdf`,
+        });
+        addedTrainingEvidence = true;
+      } catch (e) {
+        console.error("Training certificate fetch failed", e);
       }
     }
 

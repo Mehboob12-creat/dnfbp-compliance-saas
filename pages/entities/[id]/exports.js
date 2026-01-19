@@ -9,6 +9,7 @@ import {
   listAssociates,
   getOrCreateMiniKyc,
 } from "../../../utils/entities/legalPersonRepo";
+import { generateLegalPersonSnapshotPdf } from "../../../utils/pdf/legalPersonSnapshotPdf";
 
 function toCsvValue(v) {
   const s = (v ?? "").toString();
@@ -218,9 +219,26 @@ export default function EntityExportsPage() {
             <div style={styles.tiny}>Printable snapshot of entity details + ownership/control overview.</div>
           </div>
           <div style={styles.cardBody}>
-            <div style={styles.warningBox}>
-              <b>Next:</b> I’ll add the PDF generator in a dedicated utility (matching your existing pdf utilities style),
-              then expose it here as a download.
+            <button
+              type="button"
+              style={styles.btnPrimary}
+              onClick={() => {
+                const doc = generateLegalPersonSnapshotPdf({
+                  entity,
+                  associates,
+                  miniKycByAssoc,
+                  uboThreshold,
+                });
+
+                const safeName = (entity.name || "entity").replace(/[^\w\-]+/g, "_");
+                doc.save(`entity_snapshot_${safeName}.pdf`);
+              }}
+            >
+              Download PDF
+            </button>
+
+            <div style={{ marginTop: 10, ...styles.tiny }}>
+              Printable snapshot for inspection documentation (neutral, review-based language).
             </div>
           </div>
         </div>

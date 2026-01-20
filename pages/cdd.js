@@ -9,12 +9,12 @@ import AppShell from "../components/AppShell";
  * - Checkboxes use: checked + onChange
  *
  * DB safety:
- * - customerType stored as "NATURAL" | "LEGAL" (fixes cdd_cases_customer_type_check)
+ * - customerType stored as "natural" | "legal" (fixes cdd_cases_customer_type_check)
  */
 
 export default function CddPage() {
   // DB-safe values
-  const [customerType, setCustomerType] = useState(""); // "NATURAL" | "LEGAL"
+  const [customerType, setCustomerType] = useState(""); // "natural" | "legal"
   const [formData, setFormData] = useState({});
 
   const [saving, setSaving] = useState(false);
@@ -254,7 +254,7 @@ export default function CddPage() {
     // customerType itself
     if (!customerType) missing.push("Nature of Customer");
 
-    if (customerType === "NATURAL") {
+    if (customerType === "natural") {
       req("id_number", "CNIC/Passport No");
       req("nationality_residence", "Nationality + Country of Residence");
       req("acting_capacity", "Acting Capacity");
@@ -271,7 +271,7 @@ export default function CddPage() {
       req("consent", "Declaration + Consent");
     }
 
-    if (customerType === "LEGAL") {
+    if (customerType === "legal") {
       req("entity_type", "Entity Type");
       req("country_incorporation", "Country of Incorporation");
       req("province_registration", "Province/Area Registration");
@@ -329,7 +329,7 @@ export default function CddPage() {
         .insert([
           {
             user_id: userId,
-            customer_type: customerType, // IMPORTANT: "NATURAL" or "LEGAL"
+            customer_type: customerType, // IMPORTANT: "natural" or "legal" (lowercase)
             answers,
             status: "draft",
           },
@@ -783,8 +783,8 @@ export default function CddPage() {
                     className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
                     <option value="">Select customer type</option>
-                    <option value="NATURAL">Natural Person</option>
-                    <option value="LEGAL">Legal Person</option>
+                    <option value="natural">Natural Person</option>
+                    <option value="legal">Legal Person</option>
                   </select>
                 </Field>
               </div>
@@ -792,8 +792,8 @@ export default function CddPage() {
           </div>
 
           {/* Forms */}
-          {customerType === "NATURAL" ? <NaturalPersonForm /> : null}
-          {customerType === "LEGAL" ? <LegalPersonForm /> : null}
+          {customerType === "natural" ? <NaturalPersonForm /> : null}
+          {customerType === "legal" ? <LegalPersonForm /> : null}
 
           {/* Action bar */}
           <div className="sticky bottom-4 mt-6">

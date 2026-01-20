@@ -11,6 +11,6 @@ export const TOP_TABS = [
   { key: "notices", label: "Response to Notices", href: "/notices" },
 
   // Later: role-gated
-  { key: "admin", label: "Admin", href: "/admin" },
-  { key: "billing", label: "Billing", href: "/billing" },
+  // { key: "admin", label: "Admin", href: "/admin" },
+  // { key: "billing", label: "Billing", href: "/billing" },
 ];

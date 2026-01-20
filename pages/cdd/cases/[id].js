@@ -5,7 +5,6 @@ import AppShell from "../../../components/AppShell";
 import { supabase } from "../../../utils/supabase";
 
 function safeLabel(key) {
-  // Convert snake_case / camelCase into a readable label
   if (!key) return "";
   const spaced = key
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -54,7 +53,6 @@ export default function CddCaseDetailPage() {
       setError("");
       setCaseRow(null);
 
-      // Ensure user session exists (inspection-safe; no sensitive leakage)
       const {
         data: { user },
         error: userErr,
@@ -68,12 +66,10 @@ export default function CddCaseDetailPage() {
         return;
       }
       if (!user) {
-        // redirect to login if your app has a login route
         router.replace("/login");
         return;
       }
 
-      // Fetch the case (RLS should enforce tenant isolation)
       const { data, error: fetchErr } = await supabase
         .from("cdd_cases")
         .select("*")
@@ -83,7 +79,6 @@ export default function CddCaseDetailPage() {
       if (cancelled) return;
 
       if (fetchErr) {
-        // Keep messaging inspection-safe and generic
         setError("Case not found or access is not permitted.");
         setLoading(false);
         return;
@@ -101,7 +96,6 @@ export default function CddCaseDetailPage() {
 
   const answersObject = useMemo(() => {
     if (!caseRow) return {};
-    // Common patterns: answers stored in "answers" jsonb; fallback to "data"
     const a = caseRow.answers ?? caseRow.data ?? {};
     return typeof a === "object" && a ? a : {};
   }, [caseRow]);
@@ -163,7 +157,6 @@ export default function CddCaseDetailPage() {
 
         {!loading && !error && caseRow && (
           <>
-            {/* Metadata */}
             <section style={{ padding: 12, border: "1px solid #ddd", marginBottom: 12 }}>
               <h2 style={{ marginTop: 0 }}>Case Details</h2>
               <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", rowGap: 8, columnGap: 12 }}>
@@ -187,7 +180,6 @@ export default function CddCaseDetailPage() {
               </div>
             </section>
 
-            {/* Placeholders: Screening + Risk */}
             <section style={{ padding: 12, border: "1px solid #ddd", marginBottom: 12 }}>
               <h2 style={{ marginTop: 0 }}>Screening & Risk (Placeholders)</h2>
 
@@ -210,7 +202,6 @@ export default function CddCaseDetailPage() {
               </div>
             </section>
 
-            {/* Answers */}
             <section style={{ padding: 12, border: "1px solid #ddd" }}>
               <h2 style={{ marginTop: 0 }}>Answers</h2>
 
@@ -233,16 +224,11 @@ export default function CddCaseDetailPage() {
         )}
       </div>
 
-      {/* Print-friendly tweaks (logic-first; minimal styling) */}
       <style jsx global>{`
         @media print {
           a,
           button {
             display: none !important;
-          }
-          hr {
-            border: 0;
-            border-top: 1px solid #ccc;
           }
         }
       `}</style>

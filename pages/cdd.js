@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { supabase } from "../utils/supabase"; // Updated import path
+import { supabase } from "../utils/supabase";
+import AppShell from "../components/AppShell";
 
 export default function CddPage() {
   // Step 7.3 — State
@@ -10,11 +11,25 @@ export default function CddPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  // Helper function for setting form fields
+  function setField(key, value) {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Updated handleChange function
+  function handleChange(e) {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  }
+
   // Handle customer type change
   const handleCustomerTypeChange = (e) => {
     const newType = e.target.value;
     setCustomerType(newType);
-    // Reset formData when customer type changes
+    // Reset formData only when customer type changes
     setFormData({});
   };
 
@@ -132,475 +147,871 @@ export default function CddPage() {
   }
 
   // Natural Person Form Component
-  const NaturalPersonForm = ({ formData, setFormData }) => {
-    const handleChange = (e) => {
-      const { name, value, type, checked } = e.target;
-      setFormData((prev) => ({
-        ...prev,
-        [name]: type === "checkbox" ? checked : value,
-      }));
-    };
-
+  const NaturalPersonForm = () => {
     return (
-      <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-gray-700">Natural Person Details</h3>
-        
-        {/* CNIC/Passport No */}
+      <div className="space-y-8">
+        {/* Section 2: Customer Details */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            CNIC/Passport No <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="id_number"
-            value={formData.id_number || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter CNIC or Passport number"
-            required
-          />
-        </div>
-
-        {/* Nationality + Country of Residence */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Nationality + Country of Residence <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="nationality_residence"
-            value={formData.nationality_residence || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="e.g., Pakistani, UAE"
-            required
-          />
-        </div>
-
-        {/* Acting Capacity */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Acting Capacity <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="acting_capacity"
-            value={formData.acting_capacity || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select acting capacity</option>
-            <option value="self">Self</option>
-            <option value="power_of_attorney">Power of Attorney</option>
-            <option value="guardian">Legal Guardian</option>
-            <option value="representative">Authorized Representative</option>
-          </select>
-        </div>
-
-        {/* Declared Income Band */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Declared Income (FBR) <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="declared_income_band"
-            value={formData.declared_income_band || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select income band</option>
-            <option value="low">Low (Below $30k)</option>
-            <option value="medium">Medium ($30k - $100k)</option>
-            <option value="high">High (Above $100k)</option>
-          </select>
-        </div>
-
-        {/* Payment Mode */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Payment Mode <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="payment_mode"
-            value={formData.payment_mode || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select payment mode</option>
-            <option value="cash">Cash</option>
-            <option value="bank_transfer">Bank Transfer</option>
-            <option value="digital_wallet">Digital Wallet</option>
-            <option value="crypto">Cryptocurrency</option>
-          </select>
-        </div>
-
-        {/* PEP Status */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            PEP Status <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="pep_status"
-            value={formData.pep_status || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select PEP status</option>
-            <option value="not_pep">Not a PEP</option>
-            <option value="current_pep">Current PEP</option>
-            <option value="former_pep">Former PEP</option>
-            <option value="family_member">Family Member of PEP</option>
-          </select>
-        </div>
-
-        {/* Transaction Amount */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Transaction Amount <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="transaction_amount"
-            value={formData.transaction_amount || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter amount (numeric)"
-            required
-          />
-        </div>
-
-        {/* Source of Funds */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Source of Funds <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="source_of_funds"
-            value={formData.source_of_funds || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select source of funds</option>
-            <option value="salary">Salary/Employment</option>
-            <option value="business">Business Income</option>
-            <option value="investment">Investment Returns</option>
-            <option value="inheritance">Inheritance</option>
-            <option value="gift">Gift</option>
-          </select>
-        </div>
-
-        {/* Consent Checkbox */}
-        <div className="flex items-start">
-          <div className="flex items-center h-5">
-            <input
-              type="checkbox"
-              name="consent"
-              checked={formData.consent || false}
-              onChange={handleChange}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              required
-            />
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">2) Customer Details</div>
+            <div className="text-sm text-slate-600">Provide identity and profile details.</div>
           </div>
-          <div className="ml-3 text-sm">
-            <label className="font-medium text-gray-700">
-              Declaration + Consent <span className="text-red-500">*</span>
-            </label>
-            <p className="text-gray-500">
-              I declare that the information provided is true and complete to the best of my knowledge.
-            </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* CNIC/Passport No */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                CNIC/Passport No <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="id_number"
+                value={formData.id_number || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                placeholder="e.g., 35201-1234567-8"
+                required
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Used for internal screening and inspection documentation.
+              </div>
+            </div>
+
+            {/* Nationality + Country of Residence */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Nationality + Country of Residence <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="nationality_residence"
+                value={formData.nationality_residence || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                placeholder="e.g., Pakistani, UAE"
+                required
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Nationality followed by current country of residence.
+              </div>
+            </div>
+
+            {/* Acting Capacity */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Acting Capacity <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="acting_capacity"
+                value={formData.acting_capacity || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select acting capacity</option>
+                <option value="self">Self</option>
+                <option value="power_of_attorney">Power of Attorney</option>
+                <option value="guardian">Legal Guardian</option>
+                <option value="representative">Authorized Representative</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                How the person is acting in this transaction.
+              </div>
+            </div>
+
+            {/* Occupation */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Occupation <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="occupation"
+                value={formData.occupation || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select occupation</option>
+                <option value="employed">Employed</option>
+                <option value="self_employed">Self-Employed</option>
+                <option value="business_owner">Business Owner</option>
+                <option value="student">Student</option>
+                <option value="retired">Retired</option>
+                <option value="unemployed">Unemployed</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Primary occupation status.
+              </div>
+            </div>
+
+            {/* Industry/Sector */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Industry/Sector <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="industry_sector"
+                value={formData.industry_sector || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select industry/sector</option>
+                <option value="banking_finance">Banking & Finance</option>
+                <option value="real_estate">Real Estate</option>
+                <option value="manufacturing">Manufacturing</option>
+                <option value="retail">Retail</option>
+                <option value="technology">Technology</option>
+                <option value="healthcare">Healthcare</option>
+                <option value="education">Education</option>
+                <option value="government">Government</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Industry sector of employment/business.
+              </div>
+            </div>
+
+            {/* Declared Income Band */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Declared Income (FBR) <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="declared_income_band"
+                value={formData.declared_income_band || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select income band</option>
+                <option value="low">Low (Below $30k)</option>
+                <option value="medium">Medium ($30k - $100k)</option>
+                <option value="high">High (Above $100k)</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Annual income declared to tax authorities.
+              </div>
+            </div>
+
+            {/* Source of Funds */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Source of Funds <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="source_of_funds"
+                value={formData.source_of_funds || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select source of funds</option>
+                <option value="salary">Salary/Employment</option>
+                <option value="business">Business Income</option>
+                <option value="investment">Investment Returns</option>
+                <option value="inheritance">Inheritance</option>
+                <option value="gift">Gift</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Primary origin of the transaction funds.
+              </div>
+            </div>
+
+            {/* Purpose of Transaction */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Purpose of Transaction <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="purpose"
+                value={formData.purpose || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select purpose</option>
+                <option value="personal_savings">Personal Savings</option>
+                <option value="business_investment">Business Investment</option>
+                <option value="property_purchase">Property Purchase</option>
+                <option value="education">Education</option>
+                <option value="medical">Medical Expenses</option>
+                <option value="family_support">Family Support</option>
+                <option value="travel">Travel</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Reason for this specific transaction.
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Placeholder for remaining questions */}
-        <div className="space-y-6">
-          <p className="text-sm text-gray-500 italic">
-            [Additional natural person questions: Occupation, Industry/Sector, Purpose of Transaction, Pakistan Geography, Foreign Exposure]
-          </p>
+        {/* Section 3: Transaction & Risk Inputs */}
+        <div>
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">3) Transaction & Risk Inputs</div>
+            <div className="text-sm text-slate-600">
+              Used for internal scoring and inspection documentation.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Transaction Amount */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Transaction Amount <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="transaction_amount"
+                value={formData.transaction_amount || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                placeholder="e.g., 500000"
+                required
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Numeric value in PKR.
+              </div>
+            </div>
+
+            {/* Payment Mode */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Payment Mode <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="payment_mode"
+                value={formData.payment_mode || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select payment mode</option>
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="digital_wallet">Digital Wallet</option>
+                <option value="crypto">Cryptocurrency</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Method of payment for this transaction.
+              </div>
+            </div>
+
+            {/* Pakistan Geography */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Pakistan Geography <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="pakistan_geography"
+                value={formData.pakistan_geography || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select location</option>
+                <option value="punjab">Punjab</option>
+                <option value="sindh">Sindh</option>
+                <option value="kpk">Khyber Pakhtunkhwa</option>
+                <option value="balochistan">Balochistan</option>
+                <option value="gilgit_baltistan">Gilgit-Baltistan</option>
+                <option value="ajk">Azad Jammu & Kashmir</option>
+                <option value="islamabad">Islamabad Capital Territory</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Geographic location within Pakistan.
+              </div>
+            </div>
+
+            {/* Foreign Exposure */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Foreign Exposure <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="foreign_exposure"
+                value={formData.foreign_exposure || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select foreign exposure</option>
+                <option value="none">None</option>
+                <option value="resident_abroad">Resident Abroad</option>
+                <option value="frequent_travel">Frequent International Travel</option>
+                <option value="foreign_bank_account">Foreign Bank Account</option>
+                <option value="foreign_business">Foreign Business Interests</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                International connections or activities.
+              </div>
+            </div>
+
+            {/* PEP Status */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                PEP Status <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="pep_status"
+                value={formData.pep_status || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select PEP status</option>
+                <option value="not_pep">Not a PEP</option>
+                <option value="current_pep">Current PEP</option>
+                <option value="former_pep">Former PEP</option>
+                <option value="family_member">Family Member of PEP</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Politically Exposed Person status.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Declaration */}
+        <div>
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">4) Declaration</div>
+            <div className="text-sm text-slate-600">
+              Required before report generation.
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start">
+              <div className="flex items-center h-5">
+                <input
+                  type="checkbox"
+                  name="consent"
+                  checked={formData.consent || false}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
+                  required
+                />
+              </div>
+              <div className="ml-3">
+                <label className="text-sm font-extrabold text-slate-800">
+                  Declaration & Consent <span className="text-rose-600">*</span>
+                </label>
+                <p className="mt-1 text-sm text-slate-600">
+                  I declare that the information provided is true, accurate, and complete to the best of my knowledge. I understand that this information will be used for internal compliance purposes and may be presented during regulatory inspections.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
   // Legal Person Form Component
-  const LegalPersonForm = ({ formData, setFormData }) => {
-    const handleChange = (e) => {
-      const { name, value, type, checked } = e.target;
-      setFormData((prev) => ({
-        ...prev,
-        [name]: type === "checkbox" ? checked : value,
-      }));
-    };
-
+  const LegalPersonForm = () => {
     return (
-      <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-gray-700">Legal Person Details</h3>
-        
-        {/* Entity Type */}
+      <div className="space-y-8">
+        {/* Section 2: Customer Details */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Entity Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="entity_type"
-            value={formData.entity_type || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select entity type</option>
-            <option value="sole_proprietorship">Sole Proprietorship</option>
-            <option value="partnership">Partnership</option>
-            <option value="private_limited">Private Limited Company</option>
-            <option value="public_limited">Public Limited Company</option>
-            <option value="non_profit">Non-Profit Organization</option>
-          </select>
-        </div>
-
-        {/* Country of Incorporation */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Country of Incorporation <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="country_incorporation"
-            value={formData.country_incorporation || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter country"
-            required
-          />
-        </div>
-
-        {/* Ownership Structure */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Ownership Structure <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="ownership_structure"
-            value={formData.ownership_structure || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select ownership structure</option>
-            <option value="sole">Sole Ownership</option>
-            <option value="partnership">Partnership</option>
-            <option value="shareholding">Shareholding</option>
-            <option value="trust">Trust</option>
-            <option value="foundation">Foundation</option>
-          </select>
-        </div>
-
-        {/* Beneficial Ownership Status */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Beneficial Ownership Status <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="bo_status"
-            value={formData.bo_status || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select BO status</option>
-            <option value="identified">Identified</option>
-            <option value="not_identified">Not Identified</option>
-            <option value="exempt">Exempt</option>
-          </select>
-        </div>
-
-        {/* Declared Turnover Band */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Declared Turnover (FBR) <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="declared_turnover_band"
-            value={formData.declared_turnover_band || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select turnover band</option>
-            <option value="micro">Micro (Below $100k)</option>
-            <option value="small">Small ($100k - $1M)</option>
-            <option value="medium">Medium ($1M - $10M)</option>
-            <option value="large">Large (Above $10M)</option>
-          </select>
-        </div>
-
-        {/* Transaction Amount */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Transaction Amount <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="transaction_amount"
-            value={formData.transaction_amount || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter amount (numeric)"
-            required
-          />
-        </div>
-
-        {/* Source of Funds */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Source of Funds <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="source_of_funds"
-            value={formData.source_of_funds || ""}
-            onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select source of funds</option>
-            <option value="revenue">Business Revenue</option>
-            <option value="investment">Investment</option>
-            <option value="loan">Loan/Credit</option>
-            <option value="capital_injection">Capital Injection</option>
-            <option value="grants">Grants/Funding</option>
-          </select>
-        </div>
-
-        {/* Hard documents submitted? */}
-        <div className="flex items-start">
-          <div className="flex items-center h-5">
-            <input
-              type="checkbox"
-              name="hard_docs_submitted"
-              checked={formData.hard_docs_submitted || false}
-              onChange={handleChange}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              required
-            />
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">2) Customer Details</div>
+            <div className="text-sm text-slate-600">Provide entity and registration details.</div>
           </div>
-          <div className="ml-3 text-sm">
-            <label className="font-medium text-gray-700">
-              Hard documents submitted? <span className="text-red-500">*</span>
-            </label>
-            <p className="text-gray-500">
-              All required hardcopy documents have been submitted and verified.
-            </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Entity Type */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Entity Type <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="entity_type"
+                value={formData.entity_type || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select entity type</option>
+                <option value="sole_proprietorship">Sole Proprietorship</option>
+                <option value="partnership">Partnership</option>
+                <option value="private_limited">Private Limited Company</option>
+                <option value="public_limited">Public Limited Company</option>
+                <option value="non_profit">Non-Profit Organization</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Legal structure of the entity.
+              </div>
+            </div>
+
+            {/* Country of Incorporation */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Country of Incorporation <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="country_incorporation"
+                value={formData.country_incorporation || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                placeholder="e.g., Pakistan"
+                required
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Country where entity is legally registered.
+              </div>
+            </div>
+
+            {/* Province/Area Registration */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Province/Area Registration <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="province_registration"
+                value={formData.province_registration || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select province/area</option>
+                <option value="punjab">Punjab</option>
+                <option value="sindh">Sindh</option>
+                <option value="kpk">Khyber Pakhtunkhwa</option>
+                <option value="balochistan">Balochistan</option>
+                <option value="gilgit_baltistan">Gilgit-Baltistan</option>
+                <option value="ajk">Azad Jammu & Kashmir</option>
+                <option value="islamabad">Islamabad Capital Territory</option>
+                <option value="foreign">Foreign Registered</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Registration jurisdiction within Pakistan.
+              </div>
+            </div>
+
+            {/* Pakistan Geography */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Pakistan Geography <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="pakistan_geography"
+                value={formData.pakistan_geography || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select location</option>
+                <option value="punjab">Punjab</option>
+                <option value="sindh">Sindh</option>
+                <option value="kpk">Khyber Pakhtunkhwa</option>
+                <option value="balochistan">Balochistan</option>
+                <option value="gilgit_baltistan">Gilgit-Baltistan</option>
+                <option value="ajk">Azad Jammu & Kashmir</option>
+                <option value="islamabad">Islamabad Capital Territory</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Geographic location of primary operations.
+              </div>
+            </div>
+
+            {/* Business Sector */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Business Sector <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="business_sector"
+                value={formData.business_sector || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select business sector</option>
+                <option value="banking_finance">Banking & Finance</option>
+                <option value="real_estate">Real Estate</option>
+                <option value="manufacturing">Manufacturing</option>
+                <option value="retail_trade">Retail Trade</option>
+                <option value="technology">Technology</option>
+                <option value="healthcare">Healthcare</option>
+                <option value="education">Education</option>
+                <option value="import_export">Import/Export</option>
+                <option value="construction">Construction</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Primary industry sector of operations.
+              </div>
+            </div>
+
+            {/* Ownership Structure */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Ownership Structure <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="ownership_structure"
+                value={formData.ownership_structure || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select ownership structure</option>
+                <option value="sole">Sole Ownership</option>
+                <option value="partnership">Partnership</option>
+                <option value="shareholding">Shareholding</option>
+                <option value="trust">Trust</option>
+                <option value="foundation">Foundation</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Legal ownership arrangement.
+              </div>
+            </div>
+
+            {/* Beneficial Ownership Status */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Beneficial Ownership Status <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="bo_status"
+                value={formData.bo_status || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select BO status</option>
+                <option value="identified">Identified</option>
+                <option value="not_identified">Not Identified</option>
+                <option value="exempt">Exempt</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Status of beneficial ownership identification.
+              </div>
+            </div>
+
+            {/* UBO Country Risk */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                UBO Country Risk <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="ubo_country_risk"
+                value={formData.ubo_country_risk || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select UBO country risk</option>
+                <option value="low">Low Risk</option>
+                <option value="medium">Medium Risk</option>
+                <option value="high">High Risk</option>
+                <option value="unknown">Unknown</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Risk rating of ultimate beneficial owner's country.
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Consent Checkbox */}
-        <div className="flex items-start">
-          <div className="flex items-center h-5">
-            <input
-              type="checkbox"
-              name="consent"
-              checked={formData.consent || false}
-              onChange={handleChange}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              required
-            />
+        {/* Section 3: Transaction & Risk Inputs */}
+        <div>
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">3) Transaction & Risk Inputs</div>
+            <div className="text-sm text-slate-600">
+              Used for internal scoring and inspection documentation.
+            </div>
           </div>
-          <div className="ml-3 text-sm">
-            <label className="font-medium text-gray-700">
-              Declaration + Consent <span className="text-red-500">*</span>
-            </label>
-            <p className="text-gray-500">
-              I declare that the information provided is true and complete to the best of my knowledge.
-            </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Control Type */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Control Type <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="control_type"
+                value={formData.control_type || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select control type</option>
+                <option value="direct">Direct Control</option>
+                <option value="indirect">Indirect Control</option>
+                <option value="joint">Joint Control</option>
+                <option value="no_control">No Control</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Type of control over the entity.
+              </div>
+            </div>
+
+            {/* Purpose of Relationship */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Purpose of Relationship <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="relationship_purpose"
+                value={formData.relationship_purpose || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select purpose</option>
+                <option value="banking">Banking Services</option>
+                <option value="investment">Investment</option>
+                <option value="trade_finance">Trade Finance</option>
+                <option value="property">Property Transaction</option>
+                <option value="corporate">Corporate Services</option>
+                <option value="other">Other</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Reason for establishing this business relationship.
+              </div>
+            </div>
+
+            {/* Declared Turnover Band */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Declared Turnover (FBR) <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="declared_turnover_band"
+                value={formData.declared_turnover_band || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select turnover band</option>
+                <option value="micro">Micro (Below $100k)</option>
+                <option value="small">Small ($100k - $1M)</option>
+                <option value="medium">Medium ($1M - $10M)</option>
+                <option value="large">Large (Above $10M)</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Annual turnover declared to tax authorities.
+              </div>
+            </div>
+
+            {/* Transaction Amount */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Transaction Amount <span className="text-rose-600">*</span>
+              </label>
+              <input
+                type="text"
+                name="transaction_amount"
+                value={formData.transaction_amount || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                placeholder="e.g., 5000000"
+                required
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Numeric value in PKR for this transaction.
+              </div>
+            </div>
+
+            {/* Source of Funds */}
+            <div>
+              <label className="block text-sm font-extrabold text-slate-800">
+                Source of Funds <span className="text-rose-600">*</span>
+              </label>
+              <select
+                name="source_of_funds"
+                value={formData.source_of_funds || ""}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                required
+              >
+                <option value="">Select source of funds</option>
+                <option value="revenue">Business Revenue</option>
+                <option value="investment">Investment</option>
+                <option value="loan">Loan/Credit</option>
+                <option value="capital_injection">Capital Injection</option>
+                <option value="grants">Grants/Funding</option>
+              </select>
+              <div className="mt-1 text-xs text-slate-500">
+                Primary origin of the transaction funds.
+              </div>
+            </div>
+
+            {/* Hard documents submitted? */}
+            <div className="md:col-span-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start">
+                  <div className="flex items-center h-5">
+                    <input
+                      type="checkbox"
+                      name="hard_docs_submitted"
+                      checked={formData.hard_docs_submitted || false}
+                      onChange={handleChange}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
+                      required
+                    />
+                  </div>
+                  <div className="ml-3">
+                    <label className="text-sm font-extrabold text-slate-800">
+                      Hard Documents Submitted & Verified <span className="text-rose-600">*</span>
+                    </label>
+                    <p className="mt-1 text-sm text-slate-600">
+                      All required hardcopy documents (registration certificates, ownership documents, board resolutions, etc.) have been physically submitted, reviewed, and verified.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Placeholder for remaining questions */}
-        <div className="space-y-6">
-          <p className="text-sm text-gray-500 italic">
-            [Additional legal person questions: Province/Area Registration, Pakistan Geography, Business Sector, UBO Country Risk, Control Type, Purpose of Relationship]
-          </p>
+        {/* Section 4: Declaration */}
+        <div>
+          <div className="mb-4">
+            <div className="text-base font-black text-slate-900">4) Declaration</div>
+            <div className="text-sm text-slate-600">
+              Required before report generation.
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start">
+              <div className="flex items-center h-5">
+                <input
+                  type="checkbox"
+                  name="consent"
+                  checked={formData.consent || false}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-200"
+                  required
+                />
+              </div>
+              <div className="ml-3">
+                <label className="text-sm font-extrabold text-slate-800">
+                  Declaration & Consent <span className="text-rose-600">*</span>
+                </label>
+                <p className="mt-1 text-sm text-slate-600">
+                  I declare that the information provided is true, accurate, and complete to the best of my knowledge. I understand that this information will be used for internal compliance purposes and may be presented during regulatory inspections.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Page Header */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">CDD / KYC / EDD</h1>
-        <p className="text-lg text-gray-600 mt-2">
-          Customer due diligence and enhanced due diligence workflows.
-        </p>
-        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <p className="text-sm text-yellow-800">
-            <span className="font-semibold">Inspection-safe note:</span> This module guides the DNFBP through customer onboarding for Natural and Legal persons. Automated screening, risk rating, and printable CDD/KYC reports will be generated here. Final compliance decisions always remain subject to human review.
-          </p>
-        </div>
-      </header>
+    <AppShell title="CDD / KYC / EDD">
+      <div className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-5xl px-4 py-8">
+          {/* Header */}
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+                CDD / KYC / EDD
+              </h1>
+              <p className="mt-2 text-sm text-slate-600 max-w-2xl">
+                Inspection-safe workflow. No automatic filings. Final decisions require human review and approval.
+              </p>
+            </div>
 
-      <main className="max-w-4xl mx-auto">
-        {/* Question 1: Nature of Customer */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Question 1: Nature of Customer</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Customer Type <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={customerType}
-              onChange={handleCustomerTypeChange}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-            >
-              <option value="">Select customer type</option>
-              <option value="natural">Natural Person</option>
-              <option value="legal">Legal Person</option>
-            </select>
-            <p className="mt-2 text-sm text-gray-500">
-              This selection determines which form you will need to complete.
-            </p>
+            <div className="flex gap-2">
+              <a
+                href="/dashboard"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+              >
+                Dashboard
+              </a>
+              <button
+                onClick={() => window.history.back()}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+
+          {/* Main Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-200 bg-slate-50">
+              <div className="text-sm font-extrabold text-slate-900">Customer Due Diligence</div>
+              <div className="mt-1 text-xs text-slate-600">
+                Complete the required fields. The report can be printed and stored for inspection evidence.
+              </div>
+            </div>
+
+            <div className="p-6 space-y-8">
+              {/* Section 1: Customer Type */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div>
+                    <div className="text-base font-black text-slate-900">1) Customer Type</div>
+                    <div className="text-sm text-slate-600">Select Natural Person or Legal Person.</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-extrabold text-slate-800">
+                      Nature of Customer <span className="text-rose-600">*</span>
+                    </label>
+                    <select
+                      value={customerType}
+                      onChange={handleCustomerTypeChange}
+                      className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                      required
+                    >
+                      <option value="">Select customer type</option>
+                      <option value="natural">Natural Person</option>
+                      <option value="legal">Legal Person</option>
+                    </select>
+                    <div className="mt-1 text-xs text-slate-500">
+                      This selection determines which form you will need to complete.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conditional Forms */}
+              {customerType === "natural" && <NaturalPersonForm />}
+              {customerType === "legal" && <LegalPersonForm />}
+            </div>
+          </div>
+
+          {/* Sticky Action Bar */}
+          <div className="sticky bottom-4 mt-6">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur px-4 py-4 shadow-lg">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-extrabold text-slate-900">Generate CDD/KYC Report</div>
+                  <div className="text-xs text-slate-600">
+                    Generates a printable report. No regulator submission is performed.
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleGenerate}
+                  disabled={saving}
+                  className={`rounded-xl px-5 py-3 text-sm font-black text-white shadow-sm
+                    ${saving ? "bg-slate-400 cursor-not-allowed" : "bg-slate-900 hover:bg-slate-800"}
+                  `}
+                >
+                  {saving ? "Processing…" : "Generate CDD/KYC Report"}
+                </button>
+              </div>
+
+              {saveError ? (
+                <div className="mt-3 text-sm font-bold text-rose-700">
+                  {saveError}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-
-        {/* Conditional Forms */}
-        {customerType === "natural" && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <NaturalPersonForm formData={formData} setFormData={setFormData} />
-          </div>
-        )}
-
-        {customerType === "legal" && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <LegalPersonForm formData={formData} setFormData={setFormData} />
-          </div>
-        )}
-
-        {/* Generate Button - Updated per Step 8.4 */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <button
-            onClick={handleGenerate}
-            disabled={saving}
-            className={`w-full py-3 px-4 rounded-md font-medium ${
-              saving 
-                ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
-                : "bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            }`}
-          >
-            {saving ? "Processing…" : "Generate CDD/KYC Report"}
-          </button>
-          
-          {/* Error display as specified */}
-          {saveError ? <div style={{ color: "#b91c1c", marginTop: 10 }}>{saveError}</div> : null}
-          
-          <p className="mt-2 text-sm text-gray-500 text-center">
-            Complete all mandatory fields to continue
-          </p>
-        </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

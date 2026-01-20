@@ -1,4 +1,5 @@
 // components/AppShell.js
+import { UI } from "../utils/ui/tokens";
 import { supabase } from "../utils/supabase";
 import TopTabs from "./TopTabs";
 
@@ -36,8 +37,14 @@ export default function AppShell({ user, title = "Dashboard", subtitle, children
     alignItems: "flex-start",
     gap: 12,
     borderBottom: "1px solid rgba(15,23,42,0.10)",
-    background:
-      "linear-gradient(135deg, rgba(15,23,42,0.86) 0%, rgba(30,41,59,0.78) 40%, rgba(2,132,199,0.38) 100%)",
+    background: `
+linear-gradient(
+  135deg,
+  rgba(15,23,42,0.92) 0%,
+  rgba(30,41,59,0.85) 40%,
+  rgba(37,99,235,0.45) 100%
+)
+`,
     color: "white",
   };
 
@@ -80,7 +87,7 @@ export default function AppShell({ user, title = "Dashboard", subtitle, children
   };
 
   const body = { padding: 18 };
-  const pageTitle = { fontSize: 22, fontWeight: 950, margin: "6px 0 6px", color: "#0f172a" };
+  const pageTitle = { fontSize: 22, fontWeight: 950, margin: "6px 0 6px", color: UI.colors.textPrimary };
   const pageSubtitle = { margin: 0, color: "#475569", lineHeight: 1.5 };
 
   return (

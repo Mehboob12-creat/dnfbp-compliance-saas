@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../lib/supabase"; // Added supabase import
+import { supabase } from "../utils/supabase"; // Updated import path
 
 export default function CddPage() {
   // Step 7.3 — State

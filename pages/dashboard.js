@@ -3,7 +3,7 @@ import Link from "next/link";
 import { supabase } from "../utils/supabase";
 import { computeInspectionReadiness } from "../utils/inspection/readiness";
 import AppShell from "../components/AppShell";
-import UI from "../utils/ui";
+import { UI } from "../utils/ui/tokens";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);

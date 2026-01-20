@@ -3,6 +3,7 @@ import Link from "next/link";
 import { supabase } from "../utils/supabase";
 import { computeInspectionReadiness } from "../utils/inspection/readiness";
 import AppShell from "../components/AppShell";
+import UI from "../utils/ui";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -127,19 +128,19 @@ export default function Dashboard() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
         <CardBlock title="Customer Overview">
-          <div style={{ color: "#64748b" }}>Placeholder (chart later)</div>
+          <div style={{ color: UI.colors.textSecondary }}>Placeholder (chart later)</div>
         </CardBlock>
 
         <CardBlock title="Risk Assessment">
-          <div style={{ color: "#64748b" }}>Placeholder (distribution later)</div>
+          <div style={{ color: UI.colors.textSecondary }}>Placeholder (distribution later)</div>
         </CardBlock>
 
         <CardBlock title="Recently Added Records">
-          <div style={{ color: "#64748b" }}>Placeholder (recent cases later)</div>
+          <div style={{ color: UI.colors.textSecondary }}>Placeholder (recent cases later)</div>
         </CardBlock>
 
         <CardBlock title="Recent Audit Trail">
-          <div style={{ color: "#64748b" }}>Placeholder (audit list later)</div>
+          <div style={{ color: UI.colors.textSecondary }}>Placeholder (audit list later)</div>
         </CardBlock>
       </div>
 
@@ -175,47 +176,47 @@ export default function Dashboard() {
         <InspectionReadinessWidget />
         
         {/* Legal Persons Widget */}
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", overflow: "hidden" }}>
-          <div style={{ padding: 14, background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#334155" }}>
-            <div style={{ fontWeight: 700 }}>Legal Persons</div>
-            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+        <div style={{ border: `1px solid ${UI.colors.border}`, borderRadius: UI.radius.lg, background: UI.colors.surface, overflow: "hidden" }}>
+          <div style={{ padding: 14, background: UI.colors.background, borderBottom: `1px solid ${UI.colors.border}`, color: UI.colors.textPrimary }}>
+            <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>Legal Persons</div>
+            <div style={{ fontSize: 12, color: UI.colors.textSecondary, marginTop: 4 }}>
               Entity onboarding, UBOs/controllers, and inspection-ready exports.
             </div>
           </div>
 
           <div style={{ padding: 16 }}>
             {entitiesLoading ? (
-              <div style={{ color: "#64748b" }}>Loading…</div>
+              <div style={{ color: UI.colors.textSecondary }}>Loading…</div>
             ) : (
               <>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${UI.colors.border}`, fontSize: 12 }}>
                     Total: <b>{entityStats.total}</b>
                   </span>
-                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${UI.colors.border}`, fontSize: 12 }}>
                     Draft: <b>{entityStats.draft}</b>
                   </span>
-                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: `1px solid ${UI.colors.border}`, fontSize: 12 }}>
                     UBO threshold not met: <b>{entityStats.uboNotMet}</b>
                   </span>
                 </div>
 
                 <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                  <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.border}`, textDecoration: "none", color: UI.colors.textPrimary }}>
                     View entities
                   </Link>
-                  <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", textDecoration: "none" }}>
+                  <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.textPrimary}`, background: UI.colors.textPrimary, color: UI.colors.surface, textDecoration: "none" }}>
                     + New entity
                   </Link>
-                  <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                  <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.border}`, textDecoration: "none", color: UI.colors.textPrimary }}>
                     Audit Log
                   </Link>
                 </div>
 
                 {entityStats.dueReview.length > 0 ? (
                   <div style={{ marginTop: 14 }}>
-                    <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Needs attention</div>
-                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
+                    <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black, color: UI.colors.textPrimary, marginBottom: 8 }}>Needs attention</div>
+                    <div style={{ border: `1px solid ${UI.colors.border}`, borderRadius: UI.radius.md, overflow: "hidden" }}>
                       {entityStats.dueReview.map((x, idx) => (
                         <Link
                           key={x.id + idx}
@@ -223,19 +224,19 @@ export default function Dashboard() {
                           style={{
                             display: "block",
                             padding: 12,
-                            borderBottom: idx === entityStats.dueReview.length - 1 ? "none" : "1px solid #e2e8f0",
+                            borderBottom: idx === entityStats.dueReview.length - 1 ? "none" : `1px solid ${UI.colors.border}`,
                             textDecoration: "none",
-                            color: "#0f172a",
+                            color: UI.colors.textPrimary,
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>{x.name}</div>
-                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{x.reason}</div>
+                          <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.semibold }}>{x.name}</div>
+                          <div style={{ fontSize: 12, color: UI.colors.textSecondary, marginTop: 4 }}>{x.reason}</div>
                         </Link>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 14, fontSize: 12, color: "#64748b" }}>
+                  <div style={{ marginTop: 14, fontSize: 12, color: UI.colors.textSecondary }}>
                     No items require attention at the moment.
                   </div>
                 )}
@@ -257,17 +258,17 @@ function KpiCard({ title, value }) {
   return (
     <div
       style={{
-        borderRadius: 18,
-        border: "1px solid rgba(15,23,42,0.10)",
-        background: "rgba(255,255,255,0.70)",
-        boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+        borderRadius: UI.radius.lg,
+        border: `1px solid ${UI.colors.border}`,
+        background: UI.colors.surface,
+        boxShadow: UI.shadow.md,
         padding: 16,
       }}
     >
-      <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800, letterSpacing: 0.3 }}>
+      <div style={{ color: UI.colors.textSecondary, fontSize: 12, fontFamily: UI.font.family, fontWeight: UI.font.weight.black, letterSpacing: 0.3 }}>
         {title}
       </div>
-      <div style={{ marginTop: 8, fontSize: 28, fontWeight: 950, color: "#0f172a" }}>{value}</div>
+      <div style={{ marginTop: 8, fontSize: 28, fontFamily: UI.font.family, fontWeight: UI.font.weight.black, color: UI.colors.textPrimary }}>{value}</div>
     </div>
   );
 }
@@ -276,29 +277,28 @@ function CardBlock({ title, children }) {
   return (
     <div
       style={{
-        borderRadius: 18,
-        border: "1px solid rgba(15,23,42,0.10)",
-        background: "rgba(255,255,255,0.70)",
-        boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+        borderRadius: UI.radius.lg,
+        border: `1px solid ${UI.colors.border}`,
+        background: UI.colors.surface,
+        boxShadow: UI.shadow.md,
         padding: 16,
         minHeight: 170,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontWeight: 950, color: "#0f172a" }}>{title}</div>
-        <div style={{ color: "#94a3b8" }}>•••</div>
+        <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black, color: UI.colors.textPrimary }}>{title}</div>
+        <div style={{ color: UI.colors.textTertiary }}>•••</div>
       </div>
       {children}
     </div>
   );
 }
 
-// Rest of the code remains unchanged...
 function Card({ title, desc }) {
   return (
-    <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-      <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-      <div style={{ color: "#64748b", fontSize: 14 }}>{desc}</div>
+    <div style={{ padding: 16, borderRadius: UI.radius.lg, border: `1px solid ${UI.colors.border}`, background: UI.colors.surface }}>
+      <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black, marginBottom: 6 }}>{title}</div>
+      <div style={{ color: UI.colors.textSecondary, fontSize: 14 }}>{desc}</div>
     </div>
   );
 }
@@ -306,9 +306,9 @@ function Card({ title, desc }) {
 function CardLink({ title, desc, href }) {
   return (
     <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>
-      <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-        <div style={{ fontWeight: 900, marginBottom: 6 }}>{title}</div>
-        <div style={{ color: "#64748b", fontSize: 14 }}>{desc}</div>
+      <div style={{ padding: 16, borderRadius: UI.radius.lg, border: `1px solid ${UI.colors.border}`, background: UI.colors.surface }}>
+        <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black, marginBottom: 6 }}>{title}</div>
+        <div style={{ color: UI.colors.textSecondary, fontSize: 14 }}>{desc}</div>
       </div>
     </Link>
   );
@@ -336,7 +336,7 @@ function Pill({ children, tone = "neutral" }) {
       ? { bg: "#fffbeb", bd: "#fde68a", tx: "#92400e" }
       : tone === "bad"
       ? { bg: "#fff1f2", bd: "#fecdd3", tx: "#9f1239" }
-      : { bg: "#f1f5f9", bd: "#e2e8f0", tx: "#0f172a" };
+      : { bg: "#f1f5f9", bd: "#e2e8f0", tx: UI.colors.textPrimary };
 
   return (
     <span
@@ -346,7 +346,8 @@ function Pill({ children, tone = "neutral" }) {
         border: `1px solid ${style.bd}`,
         background: style.bg,
         color: style.tx,
-        fontWeight: 900,
+        fontFamily: UI.font.family,
+        fontWeight: UI.font.weight.black,
         fontSize: 12,
         whiteSpace: "nowrap",
       }}
@@ -358,7 +359,7 @@ function Pill({ children, tone = "neutral" }) {
 
 function CardShell({ title, children, right }) {
   return (
-    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+    <div style={{ background: UI.colors.surface, border: `1px solid ${UI.colors.border}`, borderRadius: UI.radius.lg, padding: 16 }}>
       <div
         style={{
           display: "flex",
@@ -369,7 +370,7 @@ function CardShell({ title, children, right }) {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ fontWeight: 900 }}>{title}</div>
+        <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>{title}</div>
         {right}
       </div>
       {children}
@@ -495,13 +496,13 @@ function InspectionReadinessWidget() {
       title="Inspection Readiness"
       right={<Pill tone={tone}>{loading ? "Loading…" : `${avgScore}/100`}</Pill>}
     >
-      <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+      <div style={{ color: UI.colors.textSecondary, fontSize: 13, lineHeight: 1.5 }}>
         Evidence coverage score for inspection preparation and internal recordkeeping.
         Regulatory reporting decisions remain subject to human review and approval.
       </div>
 
       {err ? (
-        <div style={{ marginTop: 10, color: "#9f1239", fontWeight: 700 }}>{err}</div>
+        <div style={{ marginTop: 10, color: UI.colors.error, fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>{err}</div>
       ) : null}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
@@ -510,12 +511,12 @@ function InspectionReadinessWidget() {
       </div>
 
       <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        <div style={{ fontWeight: 900, color: "#0f172a" }}>Needs attention</div>
+        <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black, color: UI.colors.textPrimary }}>Needs attention</div>
 
         {loading ? (
-          <div style={{ color: "#64748b" }}>Loading customers…</div>
+          <div style={{ color: UI.colors.textSecondary }}>Loading customers…</div>
         ) : topNeedingAttention.length === 0 ? (
-          <div style={{ color: "#64748b" }}>No customer records found.</div>
+          <div style={{ color: UI.colors.textSecondary }}>No customer records found.</div>
         ) : (
           topNeedingAttention.map((c) => (
             <div
@@ -526,26 +527,27 @@ function InspectionReadinessWidget() {
                 gap: 12,
                 alignItems: "center",
                 padding: 10,
-                border: "1px solid #e2e8f0",
-                borderRadius: 12,
-                background: "#f8fafc",
+                border: `1px solid ${UI.colors.border}`,
+                borderRadius: UI.radius.md,
+                background: UI.colors.background,
                 flexWrap: "wrap",
               }}
             >
               <div style={{ display: "grid", gap: 2 }}>
-                <div style={{ fontWeight: 900 }}>{c.name}</div>
-                <div style={{ color: "#64748b", fontSize: 12 }}>Readiness: {c.score}/100</div>
+                <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>{c.name}</div>
+                <div style={{ color: UI.colors.textSecondary, fontSize: 12 }}>Readiness: {c.score}/100</div>
               </div>
 
               <button
                 onClick={() => (window.location.href = `/inspection/${c.id}`)}
                 style={{
                   padding: "10px 14px",
-                  borderRadius: 14,
-                  border: "1px solid #cbd5e1",
-                  background: "white",
-                  color: "#0f172a",
-                  fontWeight: 900,
+                  borderRadius: UI.radius.md,
+                  border: `1px solid ${UI.colors.borderLight}`,
+                  background: UI.colors.surface,
+                  color: UI.colors.textPrimary,
+                  fontFamily: UI.font.family,
+                  fontWeight: UI.font.weight.black,
                   cursor: "pointer",
                 }}
                 title="Open Inspection Mode for this customer."
@@ -621,17 +623,18 @@ function InspectionQuickActionsCard() {
   }
 
   return (
-    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+    <div style={{ background: UI.colors.surface, border: `1px solid ${UI.colors.border}`, borderRadius: UI.radius.lg, padding: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 900 }}>Inspection Quick Actions</div>
+        <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>Inspection Quick Actions</div>
         <span
           style={{
             padding: "6px 10px",
             borderRadius: 999,
-            border: "1px solid #e2e8f0",
-            background: "#f1f5f9",
-            color: "#0f172a",
-            fontWeight: 900,
+            border: `1px solid ${UI.colors.border}`,
+            background: UI.colors.background,
+            color: UI.colors.textPrimary,
+            fontFamily: UI.font.family,
+            fontWeight: UI.font.weight.black,
             fontSize: 12,
           }}
           title="Uses the last customer you opened in the Customers section."
@@ -640,7 +643,7 @@ function InspectionQuickActionsCard() {
         </span>
       </div>
 
-      <div style={{ marginTop: 10, color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+      <div style={{ marginTop: 10, color: UI.colors.textSecondary, fontSize: 13, lineHeight: 1.5 }}>
         Open Inspection Mode or export an inspection pack for the last customer you viewed.
         This platform does not automatically file reports or communicate with regulators.
       </div>
@@ -656,11 +659,12 @@ function InspectionQuickActionsCard() {
           }}
           style={{
             padding: "10px 14px",
-            borderRadius: 14,
-            border: "1px solid #cbd5e1",
-            background: "white",
-            color: "#0f172a",
-            fontWeight: 900,
+            borderRadius: UI.radius.md,
+            border: `1px solid ${UI.colors.borderLight}`,
+            background: UI.colors.surface,
+            color: UI.colors.textPrimary,
+            fontFamily: UI.font.family,
+            fontWeight: UI.font.weight.black,
             cursor: "pointer",
           }}
         >
@@ -671,11 +675,12 @@ function InspectionQuickActionsCard() {
           onClick={downloadPack}
           style={{
             padding: "10px 14px",
-            borderRadius: 14,
-            border: "1px solid #0f172a",
-            background: "#0f172a",
-            color: "white",
-            fontWeight: 900,
+            borderRadius: UI.radius.md,
+            border: `1px solid ${UI.colors.textPrimary}`,
+            background: UI.colors.textPrimary,
+            color: UI.colors.surface,
+            fontFamily: UI.font.family,
+            fontWeight: UI.font.weight.black,
             cursor: "pointer",
           }}
         >
@@ -688,12 +693,13 @@ function InspectionQuickActionsCard() {
           style={{
             padding: "10px 14px",
             borderRadius: 12,
-            border: "1px solid #e2e8f0",
+            border: `1px solid ${UI.colors.border}`,
             textDecoration: "none",
-            color: "#0f172a",
-            background: "#fff",
+            color: UI.colors.textPrimary,
+            background: UI.colors.surface,
             display: "inline-block",
-            fontWeight: 900,
+            fontFamily: UI.font.family,
+            fontWeight: UI.font.weight.black,
             cursor: "pointer",
           }}
         >
@@ -706,12 +712,13 @@ function InspectionQuickActionsCard() {
         <Link href="/policy" style={{ textDecoration: "none" }}>
           <button
             style={{
-              borderRadius: 14,
+              borderRadius: UI.radius.md,
               padding: "12px 14px",
-              border: "1px solid rgba(255,255,255,0.12)",
+              border: `1px solid rgba(255,255,255,0.12)`,
               background: "rgba(255,255,255,0.08)",
               color: "#e5e7eb",
-              fontWeight: 700,
+              fontFamily: UI.font.family,
+              fontWeight: UI.font.weight.semibold,
               cursor: "pointer",
               width: "100%",
             }}
@@ -791,13 +798,13 @@ function NoticesDueSoonWidget() {
   const cardStyle = {
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 18,
+    borderRadius: UI.radius.lg,
     padding: 18,
     boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
   };
 
   const rowStyle = {
-    borderRadius: 14,
+    borderRadius: UI.radius.md,
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(255,255,255,0.03)",
     padding: 12,
@@ -819,7 +826,7 @@ function NoticesDueSoonWidget() {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Regulator notices</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Notices due soon</div>
+          <div style={{ fontSize: 16, fontFamily: UI.font.family, fontWeight: UI.font.weight.extrabold }}>Notices due soon</div>
           <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.5 }}>
             Tracks deadlines for internal planning. Responses are drafted and delivered for client submission (no regulator integration).
           </div>
@@ -831,12 +838,13 @@ function NoticesDueSoonWidget() {
           <Link href="/notices" style={{ textDecoration: "none" }}>
             <button
               style={{
-                borderRadius: 14,
+                borderRadius: UI.radius.md,
                 padding: "12px 14px",
                 border: "1px solid rgba(255,255,255,0.12)",
                 background: "rgba(199,210,254,0.18)",
                 color: "#e5e7eb",
-                fontWeight: 800,
+                fontFamily: UI.font.family,
+                fontWeight: UI.font.weight.extrabold,
                 cursor: "pointer",
               }}
               title="Open Regulator Notices module"
@@ -858,7 +866,7 @@ function NoticesDueSoonWidget() {
           rows.map((r) => (
             <div key={r.id} style={rowStyle}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ fontWeight: 800 }}>
+                <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.extrabold }}>
                   {r.regulator_name || "Regulator"}
                   {r.reference_no ? <span style={{ opacity: 0.75, fontWeight: 650 }}> • {r.reference_no}</span> : null}
                 </div>
@@ -877,12 +885,13 @@ function NoticesDueSoonWidget() {
                 <Link href={`/notices/${r.id}`} style={{ textDecoration: "none" }}>
                   <button
                     style={{
-                      borderRadius: 14,
+                      borderRadius: UI.radius.md,
                       padding: "10px 12px",
                       border: "1px solid rgba(255,255,255,0.12)",
                       background: "rgba(255,255,255,0.08)",
                       color: "#e5e7eb",
-                      fontWeight: 750,
+                      fontFamily: UI.font.family,
+                      fontWeight: UI.font.weight.semibold,
                       cursor: "pointer",
                     }}
                     title="Open notice details and draft response"

@@ -269,6 +269,82 @@ export default function Dashboard() {
         <KpiCard title="Inspection Readiness" value={kpisLoading ? "…" : `${kpis.inspectionAvg}/100`} />
       </div>
 
+      {/* Quick Modules Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+          marginBottom: 18,
+        }}
+      >
+        <ModuleCard
+          title="Policies"
+          desc="Submit policy inputs, receive consultant-drafted AML/CFT policy, and download anytime."
+          href="/policy"
+          meta="One-time policy workflow"
+        />
+
+        <ModuleCard
+          title="CDD / KYC / EDD"
+          desc="Run customer onboarding (Natural or Legal) and generate an inspection-ready CDD/KYC report."
+          href="/cdd"
+          meta="Core onboarding"
+        />
+
+        <ModuleCard
+          title="TFS & PF Evidence"
+          desc="View sanctions/TFS screening evidence records and printable documentation bundles."
+          href="/screening"
+          meta="UN • NACTA • MoFA • PF"
+        />
+
+        <ModuleCard
+          title="Inspection Data"
+          desc="Generate inspection ledger exports and documentation ZIP packages (no regulator submission)."
+          href="/inspection-data"
+          meta="Exports & evidence"
+        />
+      </div>
+
+      {/* Secondary Module Links */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+          marginBottom: 18,
+        }}
+      >
+        <ModuleCard
+          title="Risk Assessment"
+          desc="Printable risk assessment outputs with reasons and risk rating label."
+          href="/risk"
+          meta="Printable PDF"
+        />
+
+        <ModuleCard
+          title="STR / CTR"
+          desc="Recommendation outputs with reasons. Final decisions remain with the compliance officer."
+          href="/str-ctr"
+          meta="Recommendations only"
+        />
+
+        <ModuleCard
+          title="Internal Controls"
+          desc="Upload and maintain compliance nomination, audit reports, and training evidence."
+          href="/controls"
+          meta="Governance"
+        />
+
+        <ModuleCard
+          title="Response to Notices"
+          desc="Track notices, draft consultant responses, version PDFs, and deliver to client for submission."
+          href="/notices"
+          meta="Consultant-controlled"
+        />
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
         <CardBlock title="Recently Added Records">
           {recentCustomers.length === 0 ? (
@@ -512,6 +588,63 @@ function CardBlock({ title, children }) {
       </div>
       {children}
     </div>
+  );
+}
+
+function ModuleCard({ title, desc, href, meta }) {
+  return (
+    <a
+      href={href}
+      style={{
+        textDecoration: "none",
+        color: "inherit",
+        display: "block",
+      }}
+    >
+      <div
+        style={{
+          borderRadius: 18,
+          border: "1px solid rgba(15,23,42,0.10)",
+          background: "rgba(255,255,255,0.70)",
+          boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+          padding: 16,
+          transition: "transform 120ms ease, box-shadow 120ms ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-2px)";
+          e.currentTarget.style.boxShadow = "0 18px 38px rgba(15,23,42,0.10)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0px)";
+          e.currentTarget.style.boxShadow = "0 12px 30px rgba(15,23,42,0.06)";
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ fontWeight: 950, color: "#0f172a", fontSize: 16 }}>{title}</div>
+          <div style={{ color: "#94a3b8", fontWeight: 900 }}>→</div>
+        </div>
+
+        <div style={{ marginTop: 8, color: "#475569", lineHeight: 1.5, fontSize: 13 }}>{desc}</div>
+
+        {meta ? (
+          <div
+            style={{
+              marginTop: 12,
+              display: "inline-flex",
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,0.10)",
+              background: "rgba(248,250,252,0.75)",
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 900,
+            }}
+          >
+            {meta}
+          </div>
+        ) : null}
+      </div>
+    </a>
   );
 }
 

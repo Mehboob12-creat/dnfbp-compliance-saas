@@ -2,142 +2,143 @@ import { useState } from "react";
 import { supabase } from "../utils/supabase";
 import AppShell from "../components/AppShell";
 
-/* -------------------------
-   SHARED INPUT STYLES
--------------------------- */
-const inputClass =
-  "mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
+/* -----------------------
+   Shared styles
+------------------------ */
+const input =
+  "mt-3 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-300";
 
-/* =========================
+/* =======================
    NATURAL PERSON FORM
-========================= */
+======================= */
 function NaturalPersonForm({ formData, handleChange }) {
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 mt-8">
 
-      {/* SECTION: CUSTOMER DETAILS */}
-      <section className="rounded-2xl border border-slate-200 p-6">
-        <h3 className="text-lg font-black text-slate-900 mb-1">
-          Customer Details
-        </h3>
+      <section className="rounded-2xl border border-slate-200 p-8 bg-white">
+        <h3 className="text-xl font-bold mb-2">Natural Person Details</h3>
         <p className="text-sm text-slate-600 mb-6">
-          Identity and personal profile information.
+          Identity and personal information.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="font-bold text-sm">
-              CNIC / Passport No *
-            </label>
-            <input
-              name="id_number"
-              value={formData.id_number || ""}
-              onChange={handleChange}
-              className={inputClass}
-            />
-          </div>
+        <div className="space-y-6">
+          <Question label="CNIC / Passport No *">
+            <input name="id_number" value={formData.id_number || ""} onChange={handleChange} className={input} />
+          </Question>
 
-          <div>
-            <label className="font-bold text-sm">
-              Nationality + Residence *
-            </label>
-            <input
-              name="nationality_residence"
-              value={formData.nationality_residence || ""}
-              onChange={handleChange}
-              className={inputClass}
-            />
-          </div>
+          <Question label="Nationality + Country of Residence *">
+            <input name="nationality_residence" value={formData.nationality_residence || ""} onChange={handleChange} className={input} />
+          </Question>
 
-          <div>
-            <label className="font-bold text-sm">Acting Capacity *</label>
-            <select
-              name="acting_capacity"
-              value={formData.acting_capacity || ""}
-              onChange={handleChange}
-              className={inputClass}
-            >
+          <Question label="Acting Capacity *">
+            <select name="acting_capacity" value={formData.acting_capacity || ""} onChange={handleChange} className={input}>
               <option value="">Select</option>
               <option value="self">Self</option>
               <option value="on_behalf">On behalf</option>
             </select>
-          </div>
+          </Question>
 
-          <div>
-            <label className="font-bold text-sm">Occupation *</label>
-            <select
-              name="occupation"
-              value={formData.occupation || ""}
-              onChange={handleChange}
-              className={inputClass}
-            >
+          <Question label="Occupation *">
+            <select name="occupation" value={formData.occupation || ""} onChange={handleChange} className={input}>
               <option value="">Select</option>
               <option value="employed">Employed</option>
               <option value="business">Business Owner</option>
-              <option value="unemployed">Unemployed</option>
+              <option value="other">Other</option>
             </select>
-          </div>
+          </Question>
         </div>
       </section>
 
-      {/* SECTION: TRANSACTION */}
-      <section className="rounded-2xl border border-slate-200 p-6">
-        <h3 className="text-lg font-black text-slate-900 mb-1">
-          Transaction Information
-        </h3>
-        <p className="text-sm text-slate-600 mb-6">
-          Used for internal risk assessment.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="font-bold text-sm">Transaction Amount *</label>
-            <input
-              name="transaction_amount"
-              value={formData.transaction_amount || ""}
-              onChange={handleChange}
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label className="font-bold text-sm">Payment Mode *</label>
-            <select
-              name="payment_mode"
-              value={formData.payment_mode || ""}
-              onChange={handleChange}
-              className={inputClass}
-            >
-              <option value="">Select</option>
-              <option value="bank">Bank</option>
-              <option value="cash">Cash</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* DECLARATION */}
-      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            name="consent"
-            checked={formData.consent || false}
-            onChange={handleChange}
-            className="mt-1"
-          />
-          <span className="text-sm text-slate-700">
-            I declare that the information provided is true and correct.
-          </span>
-        </label>
-      </section>
+      <Declaration formData={formData} handleChange={handleChange} />
     </div>
   );
 }
 
-/* =========================
+/* =======================
+   LEGAL PERSON FORM
+======================= */
+function LegalPersonForm({ formData, handleChange }) {
+  return (
+    <div className="space-y-10 mt-8">
+
+      <section className="rounded-2xl border border-slate-200 p-8 bg-white">
+        <h3 className="text-xl font-bold mb-2">Legal Entity Details</h3>
+        <p className="text-sm text-slate-600 mb-6">
+          Entity registration and ownership information.
+        </p>
+
+        <div className="space-y-6">
+          <Question label="Entity Type *">
+            <select name="entity_type" value={formData.entity_type || ""} onChange={handleChange} className={input}>
+              <option value="">Select</option>
+              <option value="private_ltd">Private Limited</option>
+              <option value="partnership">Partnership</option>
+              <option value="trust">Trust / NGO</option>
+            </select>
+          </Question>
+
+          <Question label="Country of Incorporation *">
+            <input name="country_incorporation" value={formData.country_incorporation || ""} onChange={handleChange} className={input} />
+          </Question>
+
+          <Question label="Business Sector *">
+            <select name="business_sector" value={formData.business_sector || ""} onChange={handleChange} className={input}>
+              <option value="">Select</option>
+              <option value="real_estate">Real Estate</option>
+              <option value="dpms">DPMS</option>
+              <option value="services">Services</option>
+            </select>
+          </Question>
+
+          <Question label="Beneficial Ownership Status *">
+            <select name="bo_status" value={formData.bo_status || ""} onChange={handleChange} className={input}>
+              <option value="">Select</option>
+              <option value="direct">Direct BO Identified</option>
+              <option value="indirect">Indirect BO</option>
+              <option value="none">No Clear BO</option>
+            </select>
+          </Question>
+        </div>
+      </section>
+
+      <Declaration formData={formData} handleChange={handleChange} />
+    </div>
+  );
+}
+
+/* =======================
+   QUESTION BLOCK
+======================= */
+function Question({ label, children }) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-slate-800">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/* =======================
+   DECLARATION
+======================= */
+function Declaration({ formData, handleChange }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-8">
+      <label className="flex gap-3">
+        <input type="checkbox" name="consent" checked={formData.consent || false} onChange={handleChange} />
+        <span className="text-sm text-slate-700">
+          I declare that the information provided is true and complete.
+        </span>
+      </label>
+    </section>
+  );
+}
+
+/* =======================
    MAIN PAGE
-========================= */
+======================= */
 export default function CddPage() {
   const [customerType, setCustomerType] = useState("");
   const [formData, setFormData] = useState({});
@@ -145,29 +146,20 @@ export default function CddPage() {
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   }
 
   async function handleGenerate() {
     setSaving(true);
     try {
       const { data: userRes } = await supabase.auth.getUser();
-      const userId = userRes?.user?.id;
-      if (!userId) throw new Error("Session expired");
+      if (!userRes?.user) throw new Error("Session expired");
 
       await supabase.from("cdd_cases").insert([
-        {
-          user_id: userId,
-          customer_type: customerType,
-          answers: formData,
-          status: "draft",
-        },
+        { user_id: userRes.user.id, customer_type: customerType, answers: formData, status: "draft" }
       ]);
 
-      alert("CDD Case saved (draft).");
+      alert("CDD case saved.");
     } catch (e) {
       alert(e.message);
     } finally {
@@ -177,50 +169,45 @@ export default function CddPage() {
 
   return (
     <AppShell title="CDD / KYC / EDD">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
 
-        <header className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-black">CDD / KYC / EDD</h1>
-            <p className="text-sm text-slate-600">
-              Inspection-safe workflow. No automatic filings.
-            </p>
-          </div>
-          <a href="/dashboard" className="font-bold text-sm">
-            Dashboard
-          </a>
+        <header className="space-y-2">
+          <h1 className="text-3xl font-bold">CDD / KYC / EDD</h1>
+          <p className="text-sm text-slate-600">
+            Inspection-safe overview of records, evidence coverage, and workflow items.
+          </p>
         </header>
 
-        <section className="rounded-2xl border border-slate-200 p-6">
-          <label className="font-bold text-sm">
-            Nature of Customer *
-          </label>
-          <select
-            value={customerType}
-            onChange={(e) => {
-              setCustomerType(e.target.value);
-              setFormData({});
-            }}
-            className={inputClass}
-          >
-            <option value="">Select</option>
-            <option value="natural">Natural Person</option>
-            <option value="legal">Legal Person</option>
-          </select>
+        <section className="rounded-2xl border border-slate-200 p-8 bg-white">
+          <Question label="Nature of Customer *">
+            <select
+              value={customerType}
+              onChange={(e) => {
+                setCustomerType(e.target.value);
+                setFormData({});
+              }}
+              className={input}
+            >
+              <option value="">Select</option>
+              <option value="natural">Natural Person</option>
+              <option value="legal">Legal Person</option>
+            </select>
+          </Question>
         </section>
 
         {customerType === "natural" && (
-          <NaturalPersonForm
-            formData={formData}
-            handleChange={handleChange}
-          />
+          <NaturalPersonForm formData={formData} handleChange={handleChange} />
         )}
 
-        <div className="sticky bottom-4">
+        {customerType === "legal" && (
+          <LegalPersonForm formData={formData} handleChange={handleChange} />
+        )}
+
+        <div className="sticky bottom-6">
           <button
             onClick={handleGenerate}
             disabled={saving}
-            className="w-full rounded-xl bg-slate-900 py-4 text-white font-black"
+            className="w-full rounded-xl bg-slate-900 py-4 text-white font-bold"
           >
             {saving ? "Processing…" : "Generate CDD/KYC Report"}
           </button>

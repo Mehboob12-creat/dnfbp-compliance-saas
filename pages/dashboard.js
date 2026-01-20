@@ -14,6 +14,18 @@ export default function Dashboard() {
     dueReview: [],
   });
   const [entitiesLoading, setEntitiesLoading] = useState(true);
+  
+  // New state for KPIs and lists
+  const [kpisLoading, setKpisLoading] = useState(true);
+  const [kpis, setKpis] = useState({
+    totalCustomers: 0,
+    totalEntities: 0,
+    noticesDueSoon: 0,
+    inspectionAvg: 0,
+  });
+  const [recentCustomers, setRecentCustomers] = useState([]);
+  const [recentEntities, setRecentEntities] = useState([]);
+  const [dueNotices, setDueNotices] = useState([]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -22,7 +34,138 @@ export default function Dashboard() {
     });
     
     loadEntityDashboard();
+    loadDashboardData(); // Load KPI data
   }, []);
+
+  async function loadDashboardData() {
+    setKpisLoading(true);
+
+    try {
+      // 1) Customers count + recent
+      const { count: custCount, error: custCountErr } = await supabase
+        .from("customers")
+        .select("id", { count: "exact", head: true });
+
+      if (custCountErr) throw custCountErr;
+
+      const { data: custRecent, error: custRecentErr } = await supabase
+        .from("customers")
+        .select("id, full_name, cnic, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (custRecentErr) throw custRecentErr;
+
+      // 2) Entities count + recent (legal persons)
+      const { count: entCount, error: entCountErr } = await supabase
+        .from("legal_persons")
+        .select("id", { count: "exact", head: true });
+
+      // If table not yet present in your DB, fail softly
+      if (entCountErr && entCountErr.message) {
+        console.warn("legal_persons not available yet:", entCountErr.message);
+      }
+
+      const { data: entRecent, error: entRecentErr } = await supabase
+        .from("legal_persons")
+        .select("id, name, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (entRecentErr && entRecentErr.message) {
+        console.warn("legal_persons recent load:", entRecentErr.message);
+      }
+
+      // 3) Notices due soon (next 14 days)
+      const now = new Date();
+      const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const start = now.toISOString().slice(0, 10);
+      const end = future.toISOString().slice(0, 10);
+
+      const { data: notices, error: noticesErr } = await supabase
+        .from("regulator_notices")
+        .select("id, regulator_name, reference_no, response_deadline, status, created_at")
+        .gte("response_deadline", start)
+        .lte("response_deadline", end)
+        .order("response_deadline", { ascending: true })
+        .limit(6);
+
+      if (noticesErr) throw noticesErr;
+
+      // 4) Inspection readiness: reuse your existing widget logic lightly
+      // For KPI, we'll compute avg readiness across last 50 customers (simple + fast)
+      const { data: custForScore, error: custScoreErr } = await supabase
+        .from("customers")
+        .select("id, full_name, cnic, city_district")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (custScoreErr) throw custScoreErr;
+
+      const list = custForScore || [];
+      let avg = 0;
+
+      if (list.length > 0) {
+        const ids = list.map((c) => c.id);
+
+        const { data: txRows, error: txErr } = await supabase
+          .from("transactions")
+          .select("customer_id")
+          .in("customer_id", ids)
+          .limit(5000);
+
+        if (txErr) throw txErr;
+        const txSet = new Set((txRows || []).map((x) => x.customer_id));
+
+        const { data: riskRows, error: riskErr } = await supabase
+          .from("risk_assessments")
+          .select("customer_id, risk_category, created_at")
+          .in("customer_id", ids)
+          .order("created_at", { ascending: false })
+          .limit(5000);
+
+        if (riskErr) throw riskErr;
+
+        const latestRiskByCustomer = new Map();
+        for (const r of riskRows || []) {
+          if (!latestRiskByCustomer.has(r.customer_id)) latestRiskByCustomer.set(r.customer_id, r);
+        }
+
+        const scored = list.map((c) => {
+          const risk = latestRiskByCustomer.get(c.id) || null;
+          const readiness = computeInspectionReadiness({
+            kycComplete: isKycComplete(c),
+            transactionRecorded: txSet.has(c.id),
+            screeningDone: false,
+            riskSaved: Boolean(risk),
+            riskBand: normalizeRiskBand(risk),
+            eddEvidenceUploaded: false,
+            trainingCompleted: false,
+            policyExists: false,
+          });
+          return readiness.score || 0;
+        });
+
+        avg = Math.round(scored.reduce((s, x) => s + x, 0) / scored.length);
+      }
+
+      setKpis({
+        totalCustomers: custCount || 0,
+        totalEntities: entCount || 0,
+        noticesDueSoon: (notices || []).length,
+        inspectionAvg: avg,
+      });
+
+      setRecentCustomers(custRecent || []);
+      setRecentEntities(entRecent || []);
+      setDueNotices(notices || []);
+    } catch (e) {
+      console.error("Dashboard data load failed:", e);
+      // Fail soft: keep UI usable
+    } finally {
+      setKpisLoading(false);
+    }
+  }
 
   async function loadEntityDashboard() {
     setEntitiesLoading(true);
@@ -120,27 +263,105 @@ export default function Dashboard() {
           marginBottom: 16,
         }}
       >
-        <KpiCard title="Total Customers" value="—" />
-        <KpiCard title="Pending Policies" value="—" />
-        <KpiCard title="CDD/KYC Reports Generated" value="—" />
-        <KpiCard title="STR/CTR Review Needed" value="—" />
+        <KpiCard title="Total Customers" value={kpisLoading ? "…" : String(kpis.totalCustomers)} />
+        <KpiCard title="Total Entities" value={kpisLoading ? "…" : String(kpis.totalEntities)} />
+        <KpiCard title="Notices Due Soon" value={kpisLoading ? "…" : String(kpis.noticesDueSoon)} />
+        <KpiCard title="Inspection Readiness" value={kpisLoading ? "…" : `${kpis.inspectionAvg}/100`} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
-        <CardBlock title="Customer Overview">
-          <div style={{ color: UI.colors.textSecondary }}>Placeholder (chart later)</div>
-        </CardBlock>
-
-        <CardBlock title="Risk Assessment">
-          <div style={{ color: UI.colors.textSecondary }}>Placeholder (distribution later)</div>
-        </CardBlock>
-
         <CardBlock title="Recently Added Records">
-          <div style={{ color: UI.colors.textSecondary }}>Placeholder (recent cases later)</div>
+          {recentCustomers.length === 0 ? (
+            <div style={{ color: UI.colors.textSecondary }}>No customer records yet.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {recentCustomers.map((c) => (
+                <a
+                  key={c.id}
+                  href={`/customers/${c.id}`}
+                  style={{
+                    textDecoration: "none",
+                    color: UI.colors.textPrimary,
+                    border: `1px solid ${UI.colors.border}`,
+                    borderRadius: UI.radius.md,
+                    padding: 12,
+                    background: UI.colors.background,
+                  }}
+                >
+                  <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>{(c.full_name || "Customer").trim()}</div>
+                  <div style={{ color: UI.colors.textSecondary, fontSize: 12, marginTop: 4 }}>
+                    {c.cnic ? `CNIC: ${c.cnic}` : "CNIC not recorded"} •{" "}
+                    {c.created_at ? new Date(c.created_at).toLocaleDateString() : "—"}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </CardBlock>
+
+        <CardBlock title="Recent Entities">
+          {recentEntities.length === 0 ? (
+            <div style={{ color: UI.colors.textSecondary }}>No entities yet.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {recentEntities.map((e) => (
+                <a
+                  key={e.id}
+                  href={`/entities/${e.id}`}
+                  style={{
+                    textDecoration: "none",
+                    color: UI.colors.textPrimary,
+                    border: `1px solid ${UI.colors.border}`,
+                    borderRadius: UI.radius.md,
+                    padding: 12,
+                    background: UI.colors.background,
+                  }}
+                >
+                  <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>{(e.name || "Entity").trim()}</div>
+                  <div style={{ color: UI.colors.textSecondary, fontSize: 12, marginTop: 4 }}>
+                    Status: {e.status || "Unknown"} •{" "}
+                    {e.created_at ? new Date(e.created_at).toLocaleDateString() : "—"}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
         </CardBlock>
 
         <CardBlock title="Recent Audit Trail">
           <div style={{ color: UI.colors.textSecondary }}>Placeholder (audit list later)</div>
+        </CardBlock>
+
+        <CardBlock title="Notices Due Soon">
+          {dueNotices.length === 0 ? (
+            <div style={{ color: UI.colors.textSecondary }}>No deadlines recorded within the next 14 days.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {dueNotices.map((n) => (
+                <a
+                  key={n.id}
+                  href={`/notices/${n.id}`}
+                  style={{
+                    textDecoration: "none",
+                    color: UI.colors.textPrimary,
+                    border: `1px solid ${UI.colors.border}`,
+                    borderRadius: UI.radius.md,
+                    padding: 12,
+                    background: UI.colors.background,
+                  }}
+                >
+                  <div style={{ fontFamily: UI.font.family, fontWeight: UI.font.weight.black }}>
+                    {(n.regulator_name || "Regulator").trim()}
+                    {n.reference_no ? ` • ${n.reference_no}` : ""}
+                  </div>
+                  <div style={{ color: UI.colors.textSecondary, fontSize: 12, marginTop: 4 }}>
+                    Deadline: {n.response_deadline ? new Date(n.response_deadline).toLocaleDateString() : "—"} •{" "}
+                    Status: {n.status || "Received"}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
         </CardBlock>
       </div>
 

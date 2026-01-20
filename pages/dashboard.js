@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../utils/supabase";
 import { computeInspectionReadiness } from "../utils/inspection/readiness";
+import AppShell from "../components/AppShell";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -109,140 +110,185 @@ export default function Dashboard() {
   if (!user) return <p style={{ padding: 24 }}>Loading...</p>;
 
   return (
-    <div style={{ minHeight: "100vh", padding: 24, background: "#f8fafc" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>Dashboard</h1>
-            <p style={{ color: "#64748b", marginTop: 6 }}>Logged in as: {user.email}</p>
-          </div>
-          <button
-            onClick={logout}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #e2e8f0",
-              background: "white",
-              cursor: "pointer",
-            }}
-          >
-            Logout
-          </button>
-        </div>
+    <AppShell user={user} title="Dashboard">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <KpiCard title="Total Customers" value="—" />
+        <KpiCard title="Pending Policies" value="—" />
+        <KpiCard title="CDD/KYC Reports Generated" value="—" />
+        <KpiCard title="STR/CTR Review Needed" value="—" />
+      </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 12,
-            marginBottom: 24,
-          }}
-        >
-          <CardLink
-            title="Add Customer (Natural Person)"
-            desc="15-question wizard (start here)."
-            href="/customers"
-          />
-          <CardLink
-            title="Training Modules"
-            desc="Videos + quizzes (next step)."
-            href="/training"
-          />
-          <CardLink
-            title="Important Links"
-            desc="FMU, FATF, UN, NACTA (next step)."
-            href="/links"
-          />
-          <Card title="Inspection Mode" desc="Readiness score + pack export (next step)." />
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
+        <CardBlock title="Customer Overview">
+          <div style={{ color: "#64748b" }}>Placeholder (chart later)</div>
+        </CardBlock>
 
-        {/* Two-column layout for main widgets */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14, marginBottom: 24 }}>
-          <InspectionReadinessWidget />
-          
-          {/* Legal Persons Widget */}
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", overflow: "hidden" }}>
-            <div style={{ padding: 14, background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#334155" }}>
-              <div style={{ fontWeight: 700 }}>Legal Persons</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                Entity onboarding, UBOs/controllers, and inspection-ready exports.
-              </div>
-            </div>
+        <CardBlock title="Risk Assessment">
+          <div style={{ color: "#64748b" }}>Placeholder (distribution later)</div>
+        </CardBlock>
 
-            <div style={{ padding: 16 }}>
-              {entitiesLoading ? (
-                <div style={{ color: "#64748b" }}>Loading…</div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
-                      Total: <b>{entityStats.total}</b>
-                    </span>
-                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
-                      Draft: <b>{entityStats.draft}</b>
-                    </span>
-                    <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
-                      UBO threshold not met: <b>{entityStats.uboNotMet}</b>
-                    </span>
-                  </div>
+        <CardBlock title="Recently Added Records">
+          <div style={{ color: "#64748b" }}>Placeholder (recent cases later)</div>
+        </CardBlock>
 
-                  <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
-                      View entities
-                    </Link>
-                    <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", textDecoration: "none" }}>
-                      + New entity
-                    </Link>
-                    <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
-                      Audit Log
-                    </Link>
-                  </div>
+        <CardBlock title="Recent Audit Trail">
+          <div style={{ color: "#64748b" }}>Placeholder (audit list later)</div>
+        </CardBlock>
+      </div>
 
-                  {entityStats.dueReview.length > 0 ? (
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Needs attention</div>
-                      <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
-                        {entityStats.dueReview.map((x, idx) => (
-                          <Link
-                            key={x.id + idx}
-                            href={`/entities/${x.id}`}
-                            style={{
-                              display: "block",
-                              padding: 12,
-                              borderBottom: idx === entityStats.dueReview.length - 1 ? "none" : "1px solid #e2e8f0",
-                              textDecoration: "none",
-                              color: "#0f172a",
-                            }}
-                          >
-                            <div style={{ fontWeight: 600 }}>{x.name}</div>
-                            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{x.reason}</div>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 14, fontSize: 12, color: "#64748b" }}>
-                      No items require attention at the moment.
-                    </div>
-                  )}
-                </>
-              )}
+      {/* Existing dashboard widgets */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        <CardLink
+          title="Add Customer (Natural Person)"
+          desc="15-question wizard (start here)."
+          href="/customers"
+        />
+        <CardLink
+          title="Training Modules"
+          desc="Videos + quizzes (next step)."
+          href="/training"
+        />
+        <CardLink
+          title="Important Links"
+          desc="FMU, FATF, UN, NACTA (next step)."
+          href="/links"
+        />
+        <Card title="Inspection Mode" desc="Readiness score + pack export (next step)." />
+      </div>
+
+      {/* Two-column layout for main widgets */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14, marginBottom: 24 }}>
+        <InspectionReadinessWidget />
+        
+        {/* Legal Persons Widget */}
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", overflow: "hidden" }}>
+          <div style={{ padding: 14, background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#334155" }}>
+            <div style={{ fontWeight: 700 }}>Legal Persons</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+              Entity onboarding, UBOs/controllers, and inspection-ready exports.
             </div>
           </div>
-          
-          <NoticesDueSoonWidget />
+
+          <div style={{ padding: 16 }}>
+            {entitiesLoading ? (
+              <div style={{ color: "#64748b" }}>Loading…</div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                    Total: <b>{entityStats.total}</b>
+                  </span>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                    Draft: <b>{entityStats.draft}</b>
+                  </span>
+                  <span style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e2e8f0", fontSize: 12 }}>
+                    UBO threshold not met: <b>{entityStats.uboNotMet}</b>
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                    View entities
+                  </Link>
+                  <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", textDecoration: "none" }}>
+                    + New entity
+                  </Link>
+                  <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0", textDecoration: "none", color: "#0f172a" }}>
+                    Audit Log
+                  </Link>
+                </div>
+
+                {entityStats.dueReview.length > 0 ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Needs attention</div>
+                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
+                      {entityStats.dueReview.map((x, idx) => (
+                        <Link
+                          key={x.id + idx}
+                          href={`/entities/${x.id}`}
+                          style={{
+                            display: "block",
+                            padding: 12,
+                            borderBottom: idx === entityStats.dueReview.length - 1 ? "none" : "1px solid #e2e8f0",
+                            textDecoration: "none",
+                            color: "#0f172a",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>{x.name}</div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{x.reason}</div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 14, fontSize: 12, color: "#64748b" }}>
+                    No items require attention at the moment.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
         
-        {/* Add the Inspection Quick Actions Card */}
-        <InspectionQuickActionsCard />
+        <NoticesDueSoonWidget />
       </div>
+      
+      {/* Add the Inspection Quick Actions Card */}
+      <InspectionQuickActionsCard />
+    </AppShell>
+  );
+}
+
+function KpiCard({ title, value }) {
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        border: "1px solid rgba(15,23,42,0.10)",
+        background: "rgba(255,255,255,0.70)",
+        boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+        padding: 16,
+      }}
+    >
+      <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800, letterSpacing: 0.3 }}>
+        {title}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 28, fontWeight: 950, color: "#0f172a" }}>{value}</div>
+    </div>
+  );
+}
+
+function CardBlock({ title, children }) {
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        border: "1px solid rgba(15,23,42,0.10)",
+        background: "rgba(255,255,255,0.70)",
+        boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+        padding: 16,
+        minHeight: 170,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontWeight: 950, color: "#0f172a" }}>{title}</div>
+        <div style={{ color: "#94a3b8" }}>•••</div>
+      </div>
+      {children}
     </div>
   );
 }

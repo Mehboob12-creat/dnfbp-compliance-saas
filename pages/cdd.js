@@ -592,11 +592,10 @@ export default function CddPage() {
           >
             {saving ? "Processing…" : "Generate CDD/KYC Report"}
           </button>
-          {saveError && (
-            <p className="mt-2 text-sm text-red-600 text-center">
-              Error: {saveError}
-            </p>
-          )}
+          
+          {/* Error display as specified */}
+          {saveError ? <div style={{ color: "#b91c1c", marginTop: 10 }}>{saveError}</div> : null}
+          
           <p className="mt-2 text-sm text-gray-500 text-center">
             Complete all mandatory fields to continue
           </p>

@@ -2,192 +2,6 @@ import { useState } from "react";
 import { supabase } from "../utils/supabase";
 import AppShell from "../components/AppShell";
 
-/* ------------------ Shared UI helpers ------------------ */
-function Field({ label, required, hint, children }) {
-  return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 18 }}>
-      <div style={{ fontWeight: 800, color: "#0f172a" }}>
-        {label} {required && <span style={{ color: "#e11d48" }}>*</span>}
-      </div>
-      {children}
-      {hint && <div style={{ fontSize: 12, color: "#64748b" }}>{hint}</div>}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: "100%",
-  padding: "12px",
-  borderRadius: 10,
-  border: "1px solid #e2e8f0",
-  background: "#fff",
-};
-
-const selectStyle = inputStyle;
-
-/* ------------------ NATURAL PERSON FORM ------------------ */
-function NaturalPersonForm({ formData, handleChange }) {
-  return (
-    <>
-      <h3 style={{ fontWeight: 900, margin: "16px 0" }}>
-        Natural Person – 15 Questions
-      </h3>
-
-      <Field label="CNIC / Passport No" required>
-        <input
-          name="id_number"
-          value={formData.id_number || ""}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-      </Field>
-
-      <Field label="Nationality" required>
-        <select
-          name="nationality"
-          value={formData.nationality || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="pakistani">Pakistani</option>
-          <option value="other">Other</option>
-        </select>
-      </Field>
-
-      <Field label="Acting Capacity" required>
-        <select
-          name="acting_capacity"
-          value={formData.acting_capacity || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="self">Self</option>
-          <option value="on_behalf">On behalf</option>
-        </select>
-      </Field>
-
-      <Field label="Occupation" required>
-        <select
-          name="occupation"
-          value={formData.occupation || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="professional">Professional</option>
-          <option value="business">Business</option>
-          <option value="unemployed">Unemployed</option>
-        </select>
-      </Field>
-
-      <Field label="Transaction Amount (PKR)" required>
-        <input
-          name="transaction_amount"
-          value={formData.transaction_amount || ""}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-      </Field>
-
-      <Field label="Declaration + Consent" required>
-        <label style={{ display: "flex", gap: 8 }}>
-          <input
-            type="checkbox"
-            name="consent"
-            checked={!!formData.consent}
-            onChange={handleChange}
-          />
-          <span>I confirm the information is correct.</span>
-        </label>
-      </Field>
-    </>
-  );
-}
-
-/* ------------------ LEGAL PERSON FORM ------------------ */
-function LegalPersonForm({ formData, handleChange }) {
-  return (
-    <>
-      <h3 style={{ fontWeight: 900, margin: "16px 0" }}>
-        Legal Person – 15 Questions
-      </h3>
-
-      <Field label="Entity Type" required>
-        <select
-          name="entity_type"
-          value={formData.entity_type || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="company">Company</option>
-          <option value="partnership">Partnership</option>
-          <option value="ngo">NGO / Trust</option>
-        </select>
-      </Field>
-
-      <Field label="Country of Incorporation" required>
-        <input
-          name="country_incorporation"
-          value={formData.country_incorporation || ""}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-      </Field>
-
-      <Field label="Ownership Structure" required>
-        <select
-          name="ownership_structure"
-          value={formData.ownership_structure || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="simple">Simple</option>
-          <option value="complex">Complex</option>
-        </select>
-      </Field>
-
-      <Field label="Transaction Amount (PKR)" required>
-        <input
-          name="transaction_amount"
-          value={formData.transaction_amount || ""}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-      </Field>
-
-      <Field label="Hard documents submitted?" required>
-        <select
-          name="hard_docs_submitted"
-          value={formData.hard_docs_submitted || ""}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">Select</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-      </Field>
-
-      <Field label="Declaration + Consent" required>
-        <label style={{ display: "flex", gap: 8 }}>
-          <input
-            type="checkbox"
-            name="consent"
-            checked={!!formData.consent}
-            onChange={handleChange}
-          />
-          <span>I confirm the information is correct.</span>
-        </label>
-      </Field>
-    </>
-  );
-}
-
-/* ------------------ MAIN PAGE ------------------ */
 export default function CddPage() {
   const [customerType, setCustomerType] = useState("");
   const [formData, setFormData] = useState({});
@@ -195,60 +9,182 @@ export default function CddPage() {
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
-    setFormData((p) => ({ ...p, [name]: type === "checkbox" ? checked : value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  }
+
+  function handleCustomerTypeChange(e) {
+    setCustomerType(e.target.value);
+    setFormData({});
   }
 
   async function handleGenerate() {
     setSaving(true);
-    alert("Draft saved. Next steps coming.");
-    setSaving(false);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const userId = userRes?.user?.id;
+      if (!userId) throw new Error("Session expired");
+
+      const { data, error } = await supabase
+        .from("cdd_cases")
+        .insert([{
+          user_id: userId,
+          customer_type: customerType,
+          answers: { ...formData, nature_of_customer: customerType },
+          status: "draft",
+        }])
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      window.location.href = `/cdd/cases/${data.id}`;
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const Field = ({ label, name, type = "text", options }) => (
+    <div className="space-y-1">
+      <label className="text-sm font-semibold text-slate-800">
+        {label} <span className="text-red-600">*</span>
+      </label>
+      {options ? (
+        <select
+          name={name}
+          value={formData[name] || ""}
+          onChange={handleChange}
+          className="w-full rounded-lg border px-3 py-2"
+        >
+          <option value="">Select</option>
+          {options.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type={type}
+          name={name}
+          value={formData[name] || ""}
+          onChange={handleChange}
+          className="w-full rounded-lg border px-3 py-2"
+        />
+      )}
+    </div>
+  );
+
+  const NaturalPersonForm = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Field label="CNIC / Passport No" name="id_number" />
+      <Field label="Nationality + Residence" name="nationality_residence" />
+      <Field label="Acting Capacity" name="acting_capacity" options={[
+        { value: "self", label: "Self" },
+        { value: "on_behalf", label: "On behalf" },
+      ]}/>
+      <Field label="Occupation" name="occupation" options={[
+        { value: "salaried", label: "Salaried" },
+        { value: "business", label: "Business" },
+        { value: "other", label: "Other" },
+      ]}/>
+      <Field label="Industry / Sector" name="industry_sector" />
+      <Field label="Source of Funds" name="source_of_funds" />
+      <Field label="Declared Income (FBR)" name="declared_income_band" />
+      <Field label="Purpose of Transaction" name="purpose" />
+      <Field label="Transaction Amount (PKR)" name="transaction_amount" />
+      <Field label="Payment Mode" name="payment_mode" options={[
+        { value: "bank", label: "Bank" },
+        { value: "cheque", label: "Cheque" },
+        { value: "cash", label: "Cash" },
+      ]}/>
+      <Field label="Pakistan Geography" name="pakistan_geography" />
+      <Field label="Foreign Exposure" name="foreign_exposure" />
+      <Field label="PEP Status" name="pep_status" />
+      <div className="md:col-span-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="consent"
+            checked={formData.consent || false}
+            onChange={handleChange}
+          />
+          <span className="text-sm">Declaration & Consent</span>
+        </label>
+      </div>
+    </div>
+  );
+
+  const LegalPersonForm = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Field label="Entity Type" name="entity_type" />
+      <Field label="Country of Incorporation" name="country_incorporation" />
+      <Field label="Province / Area" name="province_registration" />
+      <Field label="Pakistan Geography" name="pakistan_geography" />
+      <Field label="Business Sector" name="business_sector" />
+      <Field label="Ownership Structure" name="ownership_structure" />
+      <Field label="Beneficial Ownership Status" name="bo_status" />
+      <Field label="UBO Country Risk" name="ubo_country_risk" />
+      <Field label="Control Type" name="control_type" />
+      <Field label="Purpose of Relationship" name="relationship_purpose" />
+      <Field label="Transaction Amount (PKR)" name="transaction_amount" />
+      <Field label="Source of Funds" name="source_of_funds" />
+      <Field label="Declared Turnover (FBR)" name="declared_turnover_band" />
+      <div className="md:col-span-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="hard_docs_submitted"
+            checked={formData.hard_docs_submitted || false}
+            onChange={handleChange}
+          />
+          <span className="text-sm">Hard documents submitted</span>
+        </label>
+      </div>
+      <div className="md:col-span-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="consent"
+            checked={formData.consent || false}
+            onChange={handleChange}
+          />
+          <span className="text-sm">Declaration & Consent</span>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
     <AppShell title="CDD / KYC / EDD">
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900 }}>CDD / KYC / EDD</h1>
-        <p style={{ color: "#64748b", marginBottom: 20 }}>
-          Inspection-safe workflow. This system does not submit anything to regulators.
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        <h1 className="text-3xl font-bold">CDD / KYC / EDD</h1>
+        <p className="text-sm text-slate-600">
+          Inspection-safe workflow. No automatic filings. Final decisions require human review.
         </p>
 
-        <Field label="Nature of Customer" required>
-          <select
-            value={customerType}
-            onChange={(e) => {
-              setCustomerType(e.target.value);
-              setFormData({});
-            }}
-            style={selectStyle}
+        <Field
+          label="Nature of Customer"
+          name="nature_of_customer"
+          options={[
+            { value: "natural", label: "Natural Person" },
+            { value: "legal", label: "Legal Person" },
+          ]}
+        />
+
+        {customerType === "natural" && <NaturalPersonForm />}
+        {customerType === "legal" && <LegalPersonForm />}
+
+        <div className="pt-6">
+          <button
+            onClick={handleGenerate}
+            disabled={saving}
+            className="px-6 py-3 rounded-xl bg-slate-900 text-white font-semibold"
           >
-            <option value="">Select</option>
-            <option value="natural">Natural Person</option>
-            <option value="legal">Legal Person</option>
-          </select>
-        </Field>
-
-        {customerType === "natural" && (
-          <NaturalPersonForm formData={formData} handleChange={handleChange} />
-        )}
-
-        {customerType === "legal" && (
-          <LegalPersonForm formData={formData} handleChange={handleChange} />
-        )}
-
-        <button
-          onClick={handleGenerate}
-          disabled={saving}
-          style={{
-            marginTop: 24,
-            padding: "14px 20px",
-            background: "#0f172a",
-            color: "white",
-            borderRadius: 12,
-            fontWeight: 900,
-          }}
-        >
-          Generate CDD / KYC Report
-        </button>
+            {saving ? "Processing…" : "Generate CDD/KYC Report"}
+          </button>
+        </div>
       </div>
     </AppShell>
   );

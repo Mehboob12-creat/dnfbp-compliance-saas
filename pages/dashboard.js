@@ -451,9 +451,9 @@ export default function Dashboard() {
         }}
       >
         <CardLink
-          title="Add Customer (Natural Person)"
+          title="CDD / KYC / EDD"
           desc="15-question wizard (start here)."
-          href="/customers"
+          href="/cdd"
         />
         <CardLink
           title="Training Modules"
@@ -499,11 +499,11 @@ export default function Dashboard() {
                 </div>
 
                 <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <Link href="/entities" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.border}`, textDecoration: "none", color: UI.colors.textPrimary }}>
-                    View entities
+                  <Link href="/cdd" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.border}`, textDecoration: "none", color: UI.colors.textPrimary }}>
+                    CDD / KYC / EDD
                   </Link>
-                  <Link href="/entities/new" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.textPrimary}`, background: UI.colors.textPrimary, color: UI.colors.surface, textDecoration: "none" }}>
-                    + New entity
+                  <Link href="/cdd" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.textPrimary}`, background: UI.colors.textPrimary, color: UI.colors.surface, textDecoration: "none" }}>
+                    CDD / KYC / EDD
                   </Link>
                   <Link href="/audit" style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${UI.colors.border}`, textDecoration: "none", color: UI.colors.textPrimary }}>
                     Audit Log
